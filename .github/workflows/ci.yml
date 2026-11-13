@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  convencoes:
+    name: Convenções (branch, título e commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Nome da branch
+        run: python3 scripts/check_commits.py --branch "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+      - name: Título do PR
+        run: python3 scripts/check_commits.py --message "$PR_TITLE"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+      - name: Commits do PR
+        run: python3 scripts/check_commits.py --range "$BASE_SHA..$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: PR referencia a issue (Closes #N)
+        if: ${{ !contains(github.event.pull_request.body, 'Closes #') && !contains(github.event.pull_request.body, 'Refs #') }}
+        run: |
+          echo "::error::Descreva 'Closes #<issue>' (ou 'Refs #<issue>') no corpo do PR."
+          exit 1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  test:
+    name: Testes (unitário + integração)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - run: uv run pytest -m "not e2e" --cov --cov-report=term-missing
+
+  e2e:
+    name: E2E (sobe os microsserviços)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: Rodar E2E
+        run: |
+          if [ -d e2e ]; then
+            uv run pytest e2e -m e2e -ra
+          else
+            echo "e2e/ ainda não existe (issues Q02/Q03); nada a rodar."
+          fi
+      - name: Logs dos serviços (em caso de falha)
+        if: failure()
+        run: |
+          for f in logs/*.log; do [ -f "$f" ] && { echo "=== $f ==="; tail -n 200 "$f"; }; done || true
+
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [convencoes, lint, test, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos os jobs obrigatórios passaram?
+        run: |
+          echo '${{ toJSON(needs) }}'
+          ! echo '${{ join(needs.*.result, ' ') }}' | grep -E 'failure|cancelled'
