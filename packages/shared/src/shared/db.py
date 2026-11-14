@@ -118,3 +118,21 @@ def migrate(
 
     return applied_now
 
+
+def transaction(
+    fn,
+    service: str,
+    data_dir: str | Path = "data",
+):
+    """Executa uma operação com commit ou rollback."""
+
+    with closing(open_db(service, data_dir)) as connection:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            result = fn(connection)
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+
