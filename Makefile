@@ -1,12 +1,16 @@
-.PHONY: install lint format test e2e check dev
+.PHONY: install lint typecheck format test e2e check dev
 
 install:            ## dependências + git hooks (rode uma vez após clonar)
 	uv sync --all-packages
 	git config core.hooksPath .githooks
 
-lint:               ## o mesmo que o CI roda
+lint:               ## o mesmo que o CI roda (ruff + mypy)
 	uv run ruff check .
 	uv run ruff format --check .
+	uv run mypy
+
+typecheck:          ## só os tipos (mypy)
+	uv run mypy
 
 format:             ## corrige formatação e imports
 	uv run ruff check --fix .

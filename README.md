@@ -29,10 +29,24 @@ Comandos do dia a dia:
 | Comando | O que faz |
 |---|---|
 | `make check` | lint + testes. **Rode antes de abrir PR** (é o que o CI roda) |
-| `make lint` / `make format` | verifica / corrige estilo (ruff) |
+| `make lint` / `make format` | verifica (ruff + mypy) / corrige estilo (ruff) |
 | `make test` | testes unitários e de integração |
 | `make e2e` | sobe tudo e roda os testes ponta a ponta |
 | `make dev` | sobe todos os serviços |
+
+## Estrutura do repositório
+
+```
+apps/                 um processo por serviço (cada um com pyproject.toml próprio)
+  gateway  broker  identidade  campanhas  aportes  custodia_retornos  notificacao
+packages/
+  shared/             utilitários compartilhados (HTTP, banco, outbox)
+  contracts/          contratos versionados (eventos e endpoints síncronos)
+services.json         nome do serviço → URL/porta (nenhuma URL fixa no código)
+.env.example          variáveis de ambiente (copie para .env)
+```
+
+Cada app depende **só** de `packages/*` e nunca importa outro app; `tests/test_arquitetura.py` verifica isso a cada `make check`.
 
 ## Fluxo de desenvolvimento
 

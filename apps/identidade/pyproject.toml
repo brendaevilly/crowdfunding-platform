@@ -1,0 +1,20 @@
+[project]
+name = "crowdfunding-identidade"
+version = "0.0.0"
+description = "Contas e KYC"
+requires-python = ">=3.12"
+dependencies = [
+    "crowdfunding-shared",
+    "crowdfunding-contracts",
+]
+
+[tool.uv.sources]
+crowdfunding-shared = { workspace = true }
+crowdfunding-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/identidade"]
