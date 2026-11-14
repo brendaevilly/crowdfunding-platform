@@ -1,7 +1,16 @@
 #!/usr/bin/env sh
 # Valida o nome da branch e roda lint antes do push. Ignore com `git push --no-verify` (use com cuidado).
+PY=
+for cand in python3 python py; do
+  if command -v "$cand" >/dev/null 2>&1 && "$cand" -c "" >/dev/null 2>&1; then
+    PY=$cand
+    break
+  fi
+done
+[ -n "$PY" ] || { echo "Python não encontrado (python3/python/py)." >&2; exit 1; }
+
 branch=$(git rev-parse --abbrev-ref HEAD)
-python3 scripts/check_commits.py --branch "$branch" || exit 1
+"$PY" scripts/check_commits.py --branch "$branch" || exit 1
 if command -v uv >/dev/null 2>&1; then
   uv run ruff check . && uv run ruff format --check . || exit 1
 fi

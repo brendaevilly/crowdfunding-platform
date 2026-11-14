@@ -57,7 +57,7 @@ def test_branches_invalidas(name):
 
 def test_hook_le_primeira_linha_nao_comentada(tmp_path):
     f = tmp_path / "msg"
-    f.write_text("# comentário\nfeat(aportes): ok (#2)\n\ncorpo\n")
+    f.write_text("# comentário\nfeat(aportes): ok (#2)\n\ncorpo\n", encoding="utf-8")
     assert cc.main(["--file", str(f)]) == 0
-    f.write_text("mensagem ruim\n")
+    f.write_text("mensagem ruim\n", encoding="utf-8")
     assert cc.main(["--file", str(f)]) == 1

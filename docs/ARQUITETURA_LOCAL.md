@@ -1,4 +1,7 @@
+
 # Microsserviços locais (sem Docker, sem nuvem)
+
+> Decisão arquitetural: [ADR-001 — Arquitetura de microsserviços local](adr/ADR-001-arquitetura-microsservicos-local.md) (proposta, aguardando aprovação da dupla).
 
 Objetivo: ter **microsserviços de verdade** (processos independentes, banco próprio, comunicação só por HTTP/eventos) rodando na máquina de desenvolvimento com um único comando, sem Docker e sem AWS. A infraestrutura da nuvem (RDS, DynamoDB, SQS, K8s) prevista nos documentos fica para uma etapa posterior; aqui cada peça tem um substituto local equivalente.
 
