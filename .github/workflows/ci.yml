@@ -36,7 +36,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - name: PR referencia a issue (Closes #N)
-        if: ${{ !contains(github.event.pull_request.body, 'Closes #') && !contains(github.event.pull_request.body, 'Refs #') }}
+        if: "!contains(github.event.pull_request.body, 'Closes #') && !contains(github.event.pull_request.body, 'Refs #')"
         run: |
           echo "::error::Descreva 'Closes #<issue>' (ou 'Refs #<issue>') no corpo do PR."
           exit 1
