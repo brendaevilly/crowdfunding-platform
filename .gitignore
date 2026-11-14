@@ -8,3 +8,16 @@ logs/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Diversos
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/

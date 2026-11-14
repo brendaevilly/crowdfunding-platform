@@ -25,3 +25,26 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 testpaths = ["tests", "apps", "packages"]
 markers = ["e2e: testes ponta a ponta (sobem todos os serviços)"]
 addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["apps", "packages", "scripts", "tests"]
+explicit_package_bases = true
+mypy_path = [
+    "scripts",
+    "packages/shared/src",
+    "packages/contracts/src",
+    "apps/gateway/src",
+    "apps/broker/src",
+    "apps/identidade/src",
+    "apps/campanhas/src",
+    "apps/aportes/src",
+    "apps/custodia_retornos/src",
+    "apps/notificacao/src",
+]
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "test_check_commits", "test_arquitetura"]
+disallow_untyped_defs = false
+disallow_untyped_decorators = false
