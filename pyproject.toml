@@ -42,7 +42,7 @@ addopts = "-ra"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["apps", "packages", "scripts", "tests"]
+files = ["apps", "packages", "scripts", "tests", "e2e"]
 explicit_package_bases = true
 mypy_path = [
     "scripts",
@@ -58,6 +58,6 @@ mypy_path = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["tests.*", "test_check_commits", "test_arquitetura"]
+module = ["tests.*", "test_check_commits", "test_arquitetura", "test_dev_launcher", "test_launcher"]
 disallow_untyped_defs = false
 disallow_untyped_decorators = false
