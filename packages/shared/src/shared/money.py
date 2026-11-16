@@ -1,7 +1,6 @@
-
 """Utilitários para valores monetários em centavos."""
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 
 def to_cents(value: str | Decimal) -> int:
@@ -35,6 +34,4 @@ def from_cents(cents: int) -> Decimal:
     if isinstance(cents, bool) or not isinstance(cents, int):
         raise TypeError("Centavos devem ser um número inteiro")
 
-    return (Decimal(cents) / Decimal("100")).quantize(
-        Decimal("0.01")
-    )
+    return (Decimal(cents) / Decimal("100")).quantize(Decimal("0.01"))
