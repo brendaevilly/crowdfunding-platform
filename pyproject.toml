@@ -42,7 +42,7 @@ addopts = "-ra"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["apps", "packages", "scripts", "tests"]
+files = ["apps", "packages", "scripts", "tests", "e2e"]
 explicit_package_bases = true
 mypy_path = [
     "scripts",
