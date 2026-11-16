@@ -4,7 +4,7 @@
 import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -66,10 +66,8 @@ async def lifespan(app: FastAPI):
         if task is not None:
             task.cancel()
 
-            try:
+            with suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
             logger.info("Dispatcher automático encerrado")
 
