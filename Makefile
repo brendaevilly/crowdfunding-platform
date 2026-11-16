@@ -4,17 +4,16 @@ install:            ## dependências + git hooks (rode uma vez após clonar)
 	uv sync --all-packages
 	git config core.hooksPath .githooks
 
-lint:               ## o mesmo que o CI roda (ruff + mypy)
+lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy
+	uv run python -m mypy
 
-typecheck:          ## só os tipos (mypy)
-	uv run mypy
+typecheck:
+	uv run python -m mypy
 
-format:             ## corrige formatação e imports
-	uv run ruff check --fix .
-	uv run ruff format .
+test:
+	uv run python -m pytest -m "not e2e"
 
 test:               ## testes unitários e de integração (sem e2e)
 	uv run pytest -m "not e2e"
