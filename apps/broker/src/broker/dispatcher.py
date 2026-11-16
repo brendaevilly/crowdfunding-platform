@@ -1,3 +1,4 @@
+
 """Entrega de eventos aos assinantes do broker."""
 
 import json
@@ -6,6 +7,7 @@ from contextlib import closing
 
 import httpx
 
+from broker.retry import max_attempts, next_attempt_at
 from shared.db import open_db, transaction
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ def dispatch_pending() -> int:
             """
             SELECT
                 d.id,
+                d.attempts,
                 e.event_id,
                 e.topic,
                 e.payload,
@@ -43,6 +46,7 @@ def dispatch_pending() -> int:
     for delivery in deliveries:
         (
             delivery_id,
+            attempts,
             event_id,
             topic,
             payload,
@@ -63,31 +67,47 @@ def dispatch_pending() -> int:
                 json=body,
                 timeout=5.0,
             )
-
-            if not 200 <= response.status_code < 300:
-                raise httpx.HTTPStatusError(
-                    "Entrega não confirmada",
-                    request=response.request,
-                    response=response,
-                )
+            response.raise_for_status()
 
         except httpx.HTTPError as exc:
-            logger.warning(
-                "Falha ao entregar evento %s: %s",
-                event_id,
-                exc,
-            )
+            new_attempts = attempts + 1
+            exhausted = new_attempts >= max_attempts()
+
+            if exhausted:
+                logger.error(
+                    "ALERTA DLQ: evento %s atingiu %s tentativas",
+                    event_id,
+                    new_attempts,
+                )
+            else:
+                logger.warning(
+                    "Falha ao entregar evento %s "
+                    "(tentativa %s): %s",
+                    event_id,
+                    new_attempts,
+                    exc,
+                )
 
             def mark_failure(conn):
                 conn.execute(
                     """
                     UPDATE broker_deliveries
-                    SET attempts = attempts + 1,
+                    SET attempts = ?,
+                        status = ?,
+                        next_attempt_at = ?,
                         last_error = ?
                     WHERE id = ?
                       AND status = 'pending'
                     """,
-                    (str(exc), delivery_id),
+                    (
+                        new_attempts,
+                        "dlq" if exhausted else "pending",
+                        None
+                        if exhausted
+                        else next_attempt_at(new_attempts),
+                        str(exc),
+                        delivery_id,
+                    ),
                 )
 
             transaction(mark_failure, "broker")
@@ -99,6 +119,7 @@ def dispatch_pending() -> int:
                 UPDATE broker_deliveries
                 SET status = 'delivered',
                     attempts = attempts + 1,
+                    next_attempt_at = NULL,
                     delivered_at = CURRENT_TIMESTAMP,
                     last_error = NULL
                 WHERE id = ?
