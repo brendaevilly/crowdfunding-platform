@@ -15,7 +15,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 @router.get("/stats")
 def get_stats():
-    """Retorna as entregas agrupadas por tópico."""
+    """Retorna estatísticas de entregas por tópico."""
     migrate("broker", MIGRATIONS_DIR)
 
     with closing(open_db("broker")) as conn:
@@ -23,13 +23,21 @@ def get_stats():
             """
             SELECT
                 e.topic,
-                d.status,
+                CASE
+                    WHEN d.status IN ('pending', 'processing')
+                        THEN 'pending'
+                    ELSE d.status
+                END AS delivery_status,
                 COUNT(*) AS total
             FROM broker_deliveries AS d
             JOIN broker_events AS e
                 ON e.id = d.event_id
-            GROUP BY e.topic, d.status
-            ORDER BY e.topic, d.status
+            GROUP BY
+                e.topic,
+                delivery_status
+            ORDER BY
+                e.topic,
+                delivery_status
             """
         ).fetchall()
 
