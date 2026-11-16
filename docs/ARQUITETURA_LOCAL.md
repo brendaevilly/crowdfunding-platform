@@ -68,6 +68,8 @@ Custódia apura o encerramento. Para ser testável localmente, o relógio é uma
 
 ## 8. Ajustes necessários nos contratos (lacunas encontradas nos documentos)
 
+> **Status:** as seis correções abaixo estão implementadas em `packages/contracts` (issue #10). O catálogo atualizado, gerado do código, está em [`docs/contratos/CATALOGO.md`](contratos/CATALOGO.md), com o trecho LaTeX em `docs/contratos/contratos-comunicacao.tex`.
+
 Ao desenhar a implementação surgiram pontos que os `.tex` ainda não cobrem. Estão incluídos como tarefas na issue de contratos:
 
 1. **`CampanhaPublicada` cruza contexto**: Custódia precisa de `campanhaId`, `meta` e `prazoFim` para abrir a `ContaCustodia` e agendar a apuração. O DDD Tático diz que o evento é só interno. Deve virar evento de contrato Campanhas → Custódia.

@@ -1,0 +1,213 @@
+% Gerado por scripts/gen_contratos_doc.py a partir de packages/contracts.
+% Cole as seções abaixo no documento de Contratos de Comunicação (e as correções no
+% DDD Tático). Não edite à mão: altere o código e rode o script.
+
+\subsection{Catálogo de eventos}
+Todo evento trafega em um envelope com \texttt{eventId}, \texttt{topic}, \texttt{schemaVersion} (atual: 1), \texttt{occurredAt}, \texttt{correlationId} e \texttt{payload}. Valores monetários em centavos.
+
+\subsubsection{UsuarioCadastrado}
+\begin{itemize}
+  \item Tópico: \texttt{usuario.cadastrado}
+  \item Produtor: identidade (contas)
+  \item Chave de idempotência: \texttt{usuarioId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{campanhas}: cria a projeção local do usuário
+    \item \texttt{identidade (kyc)}: abre a verificação de identidade
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{usuarioId} & string & sim \\
+\texttt{perfil} & EMPREENDEDOR \textbar{} INVESTIDOR & sim \\
+\texttt{cadastradoEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{UsuarioStatusAlterado}
+\begin{itemize}
+  \item Tópico: \texttt{usuario.status-alterado}
+  \item Produtor: identidade (contas)
+  \item Chave de idempotência: \texttt{eventId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{campanhas}: bloqueia/libera a publicação de campanhas (cada evento é uma transição)
+    \item \texttt{aportes}: bloqueia/libera novos aportes
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{usuarioId} & string & sim \\
+\texttt{statusAnterior} & ATIVO \textbar{} BLOQUEADO & sim \\
+\texttt{statusNovo} & ATIVO \textbar{} BLOQUEADO & sim \\
+\texttt{motivo} & string (opcional) & não \\
+\texttt{alteradoEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{IdentidadeVerificada}
+\begin{itemize}
+  \item Tópico: \texttt{identidade.verificada}
+  \item Produtor: identidade (kyc)
+  \item Chave de idempotência: \texttt{usuarioId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{aportes}: marca o investidor como verificado (via camada anticorrupção)
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{usuarioId} & string & sim \\
+\texttt{verificadaEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{CampanhaPublicada}
+\begin{itemize}
+  \item Tópico: \texttt{campanha.publicada}
+  \item Produtor: campanhas
+  \item Chave de idempotência: \texttt{campanhaId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{custodia\_retornos (custódia)}: abre a ContaCustodia e agenda a apuração em prazoFim
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{campanhaId} & string & sim \\
+\texttt{empreendedorId} & string & sim \\
+\texttt{meta} & inteiro (centavos) & sim \\
+\texttt{prazoFim} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{TotalArrecadadoAtualizado}
+\begin{itemize}
+  \item Tópico: \texttt{campanha.total-arrecadado-atualizado}
+  \item Produtor: custodia\_retornos (custódia)
+  \item Chave de idempotência: \texttt{eventId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{campanhas}: atualiza valorAcumulado (monotônico: ignora valor menor que o atual)
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{campanhaId} & string & sim \\
+\texttt{valorAcumulado} & inteiro (centavos) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{AporteConfirmado}
+\begin{itemize}
+  \item Tópico: \texttt{aporte.confirmado}
+  \item Produtor: aportes
+  \item Chave de idempotência: \texttt{aporteId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{custodia\_retornos (custódia)}: registra a RETENCAO do valor na ContaCustodia
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{aporteId} & string & sim \\
+\texttt{campanhaId} & string & sim \\
+\texttt{investidorId} & string & sim \\
+\texttt{valor} & inteiro (centavos) & sim \\
+\texttt{confirmadoEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{CampanhaLiquidada}
+\begin{itemize}
+  \item Tópico: \texttt{campanha.liquidada}
+  \item Produtor: custodia\_retornos (custódia)
+  \item Chave de idempotência: \texttt{campanhaId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{custodia\_retornos (retornos)}: calcula e distribui os retornos aos investidores
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{campanhaId} & string & sim \\
+\texttt{valorBruto} & inteiro (centavos) & sim \\
+\texttt{taxaPlataforma} & inteiro (centavos) & sim \\
+\texttt{valorLiquido} & inteiro (centavos) & sim \\
+\texttt{liquidadaEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{ResultadoCampanha}
+\begin{itemize}
+  \item Tópico: \texttt{campanha.resultado}
+  \item Produtor: custodia\_retornos (custódia)
+  \item Chave de idempotência: \texttt{campanhaId}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{campanhas}: encerra a campanha com o resultado
+    \item \texttt{notificacao}: avisa o empreendedor e os investidores
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{campanhaId} & string & sim \\
+\texttt{empreendedorId} & string & sim \\
+\texttt{resultado} & SUCESSO \textbar{} FALHA & sim \\
+\texttt{valorArrecadado} & inteiro (centavos) & sim \\
+\texttt{investidorIds} & lista de typing.Annotated[str, StringConstraints(strip\_whitespace=True, to\_upper=None, to\_lower=None, strict=None, min\_length=1, max\_length=64, pattern=None, ascii\_only=None)] & sim \\
+\texttt{encerradaEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsubsection{RetornoDistribuido}
+\begin{itemize}
+  \item Tópico: \texttt{retorno.distribuido}
+  \item Produtor: custodia\_retornos (retornos)
+  \item Chave de idempotência: \texttt{(investidorId, eventoOrigemId)}
+  \item Consumidores:
+  \begin{itemize}
+    \item \texttt{notificacao}: avisa o investidor do retorno recebido
+  \end{itemize}
+\end{itemize}
+\begin{tabular}{lll}
+\hline
+Campo & Tipo & Obrigatório \\
+\hline
+\texttt{retornoId} & string & sim \\
+\texttt{campanhaId} & string & sim \\
+\texttt{investidorId} & string & sim \\
+\texttt{valor} & inteiro (centavos) & sim \\
+\texttt{eventoOrigemId} & string & sim \\
+\texttt{distribuidoEm} & data/hora UTC (ISO 8601) & sim \\
+\hline
+\end{tabular}
+
+\subsection{Contrato síncrono Aportes $\rightarrow$ Campanhas}
+\texttt{GET /campanhas/:id/status} retorna \texttt{campanhaId} e \texttt{status} (RASCUNHO \textbar{} PUBLICADA \textbar{} ENCERRADA \textbar{} CANCELADA). Somente \texttt{PUBLICADA} aceita aportes.
+
+\subsection{Correções aos contratos}
+\begin{enumerate}
+  \item \textbf{LC-01}: CampanhaPublicada vira contrato entre Campanhas e Custódia. Custódia precisa de campanhaId, meta, prazoFim e empreendedorId para abrir a ContaCustodia e agendar a apuração.
+  \item \textbf{LC-02}: Notificação recebe os destinatários. ResultadoCampanha traz empreendedorId e investidorIds; RetornoDistribuido traz investidorId.
+  \item \textbf{LC-03}: Contrato de Notificação lista RetornoDistribuido. RetornoDistribuido substitui CampanhaLiquidada no contrato de Notificação.
+  \item \textbf{LC-04}: Novo evento UsuarioStatusAlterado. Campanhas e Aportes passam a saber do bloqueio/desbloqueio de usuário por evento.
+  \item \textbf{LC-05}: Taxa da plataforma calculada na LIBERACAO da Custódia. CampanhaLiquidada informa valorBruto, taxaPlataforma e valorLiquido (valorBruto = taxaPlataforma + valorLiquido).
+  \item \textbf{LC-06}: CampanhaLiquidada só em sucesso. Na falha ocorrem as DEVOLUCOES e apenas ResultadoCampanha é emitido.
+\end{enumerate}
