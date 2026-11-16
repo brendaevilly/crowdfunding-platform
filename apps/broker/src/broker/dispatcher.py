@@ -6,13 +6,12 @@ import logging
 import os
 import sqlite3
 import uuid
-from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from broker.retry import max_attempts, next_attempt_at
-from shared.db import open_db, transaction
+from shared.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +32,15 @@ def lease_seconds() -> int:
     )
 
 
-def reserve_delivery(conn: sqlite3.Connection):
-    """Reserva uma entrega disponível de forma atômica."""
+def reserve_delivery(
+    conn: sqlite3.Connection,
+    excluded_ids: set[int] | None = None,
+):
+    """Reserva atomicamente uma entrega disponível."""
     now = db_timestamp(utc_now())
+    excluded_ids = excluded_ids or set()
 
-    row = conn.execute(
+    rows = conn.execute(
         """
         SELECT
             d.id,
@@ -64,10 +67,14 @@ def reserve_delivery(conn: sqlite3.Connection):
             AND d.next_attempt_at <= ?
         )
         ORDER BY d.id
-        LIMIT 1
         """,
         (now, now),
-    ).fetchone()
+    ).fetchall()
+
+    row = next(
+        (item for item in rows if item[0] not in excluded_ids),
+        None,
+    )
 
     if row is None:
         return None
@@ -94,11 +101,12 @@ def reserve_delivery(conn: sqlite3.Connection):
 def dispatch_pending() -> int:
     """Processa entregas disponíveis com reserva SQLite."""
     delivered = 0
-    processed = set()
+    processed: set[int] = set()
 
     while True:
+
         def reserve(conn):
-            return reserve_delivery(conn)
+            return reserve_delivery(conn, processed)
 
         delivery = transaction(reserve, "broker")
 
@@ -115,9 +123,6 @@ def dispatch_pending() -> int:
             url,
             token,
         ) = delivery
-
-        if delivery_id in processed:
-            break
 
         processed.add(delivery_id)
 
@@ -137,7 +142,10 @@ def dispatch_pending() -> int:
 
             if not 200 <= response.status_code < 300:
                 raise httpx.HTTPStatusError(
-                    f"Entrega não confirmada: HTTP {response.status_code}",
+                    (
+                        "Entrega não confirmada: "
+                        f"HTTP {response.status_code}"
+                    ),
                     request=response.request,
                     response=response,
                 )
@@ -147,7 +155,7 @@ def dispatch_pending() -> int:
             exhausted = new_attempts >= max_attempts()
 
             def mark_failure(conn):
-                conn.execute(
+                cursor = conn.execute(
                     """
                     UPDATE broker_deliveries
                     SET attempts = ?,
@@ -171,21 +179,23 @@ def dispatch_pending() -> int:
                         token,
                     ),
                 )
+                return cursor.rowcount == 1
 
-            transaction(mark_failure, "broker")
+            updated = transaction(mark_failure, "broker")
 
-            if exhausted:
-                logger.error(
-                    "ALERTA DLQ: evento %s atingiu %s tentativas",
-                    event_id,
-                    new_attempts,
-                )
-            else:
-                logger.warning(
-                    "Falha ao entregar evento %s: %s",
-                    event_id,
-                    exc,
-                )
+            if updated:
+                if exhausted:
+                    logger.error(
+                        "ALERTA DLQ: evento %s atingiu %s tentativas",
+                        event_id,
+                        new_attempts,
+                    )
+                else:
+                    logger.warning(
+                        "Falha ao entregar evento %s: %s",
+                        event_id,
+                        exc,
+                    )
 
             continue
 
