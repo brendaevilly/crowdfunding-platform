@@ -1,4 +1,3 @@
-
 """Testes da DLQ e do replay de entregas."""
 
 from contextlib import closing
@@ -103,9 +102,7 @@ def test_dlq_e_replay(tmp_path, monkeypatch):
         assert lease_token is None
 
         # Recoloca a entrega na fila.
-        resposta = client.post(
-            f"/dlq/{delivery_id}/replay"
-        )
+        resposta = client.post(f"/dlq/{delivery_id}/replay")
 
         assert resposta.status_code == 200
         assert resposta.json()["status"] == "pending"

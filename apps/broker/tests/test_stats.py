@@ -1,4 +1,3 @@
-
 """Testes das estatísticas de entregas do broker."""
 
 from contextlib import closing
@@ -9,9 +8,7 @@ from broker.app import app
 from shared.db import open_db
 
 
-def test_stats_contabiliza_status_por_topico(
-    tmp_path, monkeypatch
-):
+def test_stats_contabiliza_status_por_topico(tmp_path, monkeypatch):
     """Conta entregas pendentes, entregues e na DLQ."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")

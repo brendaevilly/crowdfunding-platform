@@ -1,4 +1,3 @@
-
 """Testes das entregas de eventos do broker."""
 
 from contextlib import closing
@@ -39,9 +38,7 @@ def preparar_evento(client):
     assert resposta.status_code == 201
 
 
-def test_dispatcher_entrega_com_sucesso(
-    tmp_path, monkeypatch
-):
+def test_dispatcher_entrega_com_sucesso(tmp_path, monkeypatch):
     """Confirma entrega quando o assinante responde HTTP 2xx."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
@@ -78,18 +75,14 @@ def test_dispatcher_entrega_com_sucesso(
     assert lease_token is None
 
 
-def test_dispatcher_agenda_retry(
-    tmp_path, monkeypatch
-):
+def test_dispatcher_agenda_retry(tmp_path, monkeypatch):
     """Agenda uma nova tentativa quando o assinante falha."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
     monkeypatch.setenv("BROKER_MAX_ATTEMPTS", "5")
 
     def fake_post(url, json, timeout):
-        raise httpx.ConnectError(
-            "Serviço indisponível"
-        )
+        raise httpx.ConnectError("Serviço indisponível")
 
     monkeypatch.setattr(httpx, "post", fake_post)
 

@@ -1,4 +1,3 @@
-
 """Teste de recuperação de assinante indisponível."""
 
 from contextlib import closing
@@ -11,9 +10,7 @@ from broker.dispatcher import dispatch_pending
 from shared.db import open_db
 
 
-def test_assinante_offline_recebe_quando_volta(
-    tmp_path, monkeypatch
-):
+def test_assinante_offline_recebe_quando_volta(tmp_path, monkeypatch):
     """Entrega mensagem quando o assinante volta a funcionar."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
@@ -100,13 +97,9 @@ def test_assinante_offline_recebe_quando_volta(
             """
         ).fetchone()
 
-        total_eventos = conn.execute(
-            "SELECT COUNT(*) FROM broker_events"
-        ).fetchone()[0]
+        total_eventos = conn.execute("SELECT COUNT(*) FROM broker_events").fetchone()[0]
 
-        total_entregas = conn.execute(
-            "SELECT COUNT(*) FROM broker_deliveries"
-        ).fetchone()[0]
+        total_entregas = conn.execute("SELECT COUNT(*) FROM broker_deliveries").fetchone()[0]
 
     assert status == "delivered"
     assert attempts == 2

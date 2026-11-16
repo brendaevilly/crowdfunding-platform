@@ -1,4 +1,3 @@
-
 """Consulta e recuperação de entregas da DLQ."""
 
 from pathlib import Path

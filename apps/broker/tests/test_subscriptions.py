@@ -1,4 +1,3 @@
-
 """Testes do cadastro de assinaturas do broker."""
 
 from fastapi.testclient import TestClient

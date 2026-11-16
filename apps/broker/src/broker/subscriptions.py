@@ -1,4 +1,3 @@
-
 """Cadastro de assinantes do broker."""
 
 from pathlib import Path

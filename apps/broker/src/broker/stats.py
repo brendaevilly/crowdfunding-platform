@@ -1,4 +1,3 @@
-
 """Estatísticas das entregas do broker."""
 
 from contextlib import closing

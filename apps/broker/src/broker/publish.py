@@ -1,4 +1,3 @@
-
 """Publicação de eventos no broker local."""
 
 import json

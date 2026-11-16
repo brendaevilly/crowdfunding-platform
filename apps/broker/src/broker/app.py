@@ -1,4 +1,3 @@
-
 """Aplicação HTTP do broker local de mensagens."""
 
 import asyncio
@@ -24,9 +23,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 def dispatcher_enabled() -> bool:
     """Verifica se o dispatcher automático está habilitado."""
-    return os.getenv(
-        "BROKER_DISPATCH_ENABLED", "true"
-    ).lower() in ("true", "1", "yes")
+    return os.getenv("BROKER_DISPATCH_ENABLED", "true").lower() in ("true", "1", "yes")
 
 
 async def run_dispatcher() -> None:

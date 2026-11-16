@@ -1,4 +1,3 @@
-
 """Entrega de eventos aos assinantes do broker."""
 
 import json
@@ -83,9 +82,7 @@ def reserve_delivery(
         return None
 
     token = str(uuid.uuid4())
-    expires_at = db_timestamp(
-        utc_now() + timedelta(seconds=lease_seconds())
-    )
+    expires_at = db_timestamp(utc_now() + timedelta(seconds=lease_seconds()))
 
     conn.execute(
         """
@@ -201,10 +198,7 @@ def dispatch_pending() -> int:
 
             if not 200 <= response.status_code < 300:
                 raise httpx.HTTPStatusError(
-                    (
-                        "Entrega não confirmada: "
-                        f"HTTP {response.status_code}"
-                    ),
+                    (f"Entrega não confirmada: HTTP {response.status_code}"),
                     request=response.request,
                     response=response,
                 )

@@ -1,4 +1,3 @@
-
 """Teste de retomada de entregas após reinicialização."""
 
 from contextlib import closing

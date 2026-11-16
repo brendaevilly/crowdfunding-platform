@@ -1,4 +1,3 @@
-
 """Configuração das tentativas de entrega do broker."""
 
 import os
@@ -32,8 +31,6 @@ def retry_delay(attempt: int) -> int:
 
 def next_attempt_at(attempt: int) -> str:
     """Data UTC da próxima tentativa."""
-    next_time = datetime.now(UTC) + timedelta(
-        seconds=retry_delay(attempt)
-    )
+    next_time = datetime.now(UTC) + timedelta(seconds=retry_delay(attempt))
 
     return next_time.strftime("%Y-%m-%d %H:%M:%S")

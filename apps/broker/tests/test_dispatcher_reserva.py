@@ -1,4 +1,3 @@
-
 """Testes de reserva e recuperação de entregas."""
 
 from contextlib import closing
@@ -39,9 +38,7 @@ def preparar_evento(client):
     assert resposta.status_code == 201
 
 
-def test_entrega_nao_pode_ser_reservada_duas_vezes(
-    tmp_path, monkeypatch
-):
+def test_entrega_nao_pode_ser_reservada_duas_vezes(tmp_path, monkeypatch):
     """Uma entrega ativa não pode receber duas reservas."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
@@ -68,9 +65,7 @@ def test_entrega_nao_pode_ser_reservada_duas_vezes(
     assert lease_token == primeira[-1]
 
 
-def test_recupera_entrega_com_reserva_expirada(
-    tmp_path, monkeypatch
-):
+def test_recupera_entrega_com_reserva_expirada(tmp_path, monkeypatch):
     """Uma reserva expirada pode ser recuperada e entregue."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")

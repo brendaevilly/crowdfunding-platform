@@ -1,4 +1,3 @@
-
 """Testes da publicação de eventos do broker."""
 
 from contextlib import closing
@@ -9,9 +8,7 @@ from broker.app import app
 from shared.db import open_db
 
 
-def test_publish_cria_entregas_e_evita_duplicacao(
-    tmp_path, monkeypatch
-):
+def test_publish_cria_entregas_e_evita_duplicacao(tmp_path, monkeypatch):
     """Publica um evento e evita entregas duplicadas."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
@@ -56,17 +53,11 @@ def test_publish_cria_entregas_e_evita_duplicacao(
         assert segunda.json()["deliveries"] == 0
 
     with closing(open_db("broker")) as conn:
-        total_eventos = conn.execute(
-            "SELECT COUNT(*) FROM broker_events"
-        ).fetchone()[0]
+        total_eventos = conn.execute("SELECT COUNT(*) FROM broker_events").fetchone()[0]
 
-        total_entregas = conn.execute(
-            "SELECT COUNT(*) FROM broker_deliveries"
-        ).fetchone()[0]
+        total_entregas = conn.execute("SELECT COUNT(*) FROM broker_deliveries").fetchone()[0]
 
-        status_entrega = conn.execute(
-            "SELECT status FROM broker_deliveries"
-        ).fetchone()[0]
+        status_entrega = conn.execute("SELECT status FROM broker_deliveries").fetchone()[0]
 
     assert total_eventos == 1
     assert total_entregas == 1
