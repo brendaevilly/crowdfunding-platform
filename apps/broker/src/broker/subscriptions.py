@@ -6,13 +6,11 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from shared.db import migrate, open_db
+from shared.db import migrate, transaction
 
 router = APIRouter()
 
-MIGRATIONS_DIR = (
-    Path(__file__).resolve().parents[2] / "migrations"
-)
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 
 class SubscriptionRequest(BaseModel):
@@ -23,19 +21,26 @@ class SubscriptionRequest(BaseModel):
 
 @router.post("/subscriptions", status_code=201)
 def create_subscription(data: SubscriptionRequest):
+    """Cadastra um assinante sem criar registros duplicados."""
     migrate("broker", MIGRATIONS_DIR)
 
-    with open_db("broker") as conn:
+    def save_subscription(conn):
         cursor = conn.execute(
             """
             INSERT OR IGNORE INTO broker_subscriptions
                 (service, topic, url)
             VALUES (?, ?, ?)
             """,
-            (data.service, data.topic, data.url),
+            (
+                data.service,
+                data.topic,
+                data.url,
+            ),
         )
 
-        created = cursor.rowcount == 1
+        return cursor.rowcount == 1
+
+    created = transaction(save_subscription, "broker")
 
     return {
         "service": data.service,
