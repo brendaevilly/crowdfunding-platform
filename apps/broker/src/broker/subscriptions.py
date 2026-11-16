@@ -1,5 +1,6 @@
 """Cadastro de assinantes do broker."""
 
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -19,11 +20,11 @@ class SubscriptionRequest(BaseModel):
 
 
 @router.post("/subscriptions", status_code=201)
-def create_subscription(data: SubscriptionRequest):
+def create_subscription(data: SubscriptionRequest) -> dict[str, str | bool]:
     """Cadastra um assinante sem criar registros duplicados."""
     migrate("broker", MIGRATIONS_DIR)
 
-    def save_subscription(conn):
+    def save_subscription(conn: sqlite3.Connection) -> bool:
         cursor = conn.execute(
             """
             INSERT OR IGNORE INTO broker_subscriptions

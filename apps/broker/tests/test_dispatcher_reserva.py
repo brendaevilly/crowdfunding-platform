@@ -10,7 +10,7 @@ from broker.dispatcher import dispatch_pending, reserve_delivery
 from shared.db import open_db, transaction
 
 
-def preparar_evento(client):
+def preparar_evento(client: TestClient) -> None:
     """Cadastra um assinante e publica um evento."""
     assinatura = {
         "service": "notificacao",

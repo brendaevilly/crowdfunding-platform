@@ -1,5 +1,6 @@
 """Consulta e recuperação de entregas da DLQ."""
 
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -12,7 +13,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 
 @router.get("/dlq")
-def list_dlq():
+def list_dlq() -> list[dict[str, int | str | None]]:
     """Lista entregas que atingiram o limite de tentativas."""
     migrate("broker", MIGRATIONS_DIR)
 
@@ -56,11 +57,11 @@ def list_dlq():
 
 
 @router.post("/dlq/{delivery_id}/replay")
-def replay_dlq(delivery_id: int):
+def replay_dlq(delivery_id: int) -> dict[str, int | str | bool]:
     """Recoloca uma entrega da DLQ na fila de processamento."""
     migrate("broker", MIGRATIONS_DIR)
 
-    def replay(conn):
+    def replay(conn: sqlite3.Connection) -> bool:
         cursor = conn.execute(
             """
             UPDATE broker_deliveries

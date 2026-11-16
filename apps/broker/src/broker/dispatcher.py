@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from typing import Any
 
 import httpx
 
@@ -37,7 +38,7 @@ def lease_seconds() -> int:
 def reserve_delivery(
     conn: sqlite3.Connection,
     excluded_ids: set[int] | None = None,
-):
+) -> tuple[Any, ...] | None:
     """Reserva atomicamente uma entrega disponível."""
     now = db_timestamp(utc_now())
     excluded_ids = excluded_ids or set()

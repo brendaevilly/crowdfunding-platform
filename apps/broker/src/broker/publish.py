@@ -1,6 +1,7 @@
 """Publicação de eventos no broker local."""
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +23,10 @@ class PublishRequest(BaseModel):
 
 
 @router.post("/publish", status_code=201)
-def publish_event(data: PublishRequest):
+def publish_event(data: PublishRequest) -> dict[str, str | bool | int]:
     migrate("broker", MIGRATIONS_DIR)
 
-    def save_event(conn):
+    def save_event(conn: sqlite3.Connection) -> dict[str, str | bool | int]:
         cursor = conn.execute(
             """
             INSERT OR IGNORE INTO broker_events

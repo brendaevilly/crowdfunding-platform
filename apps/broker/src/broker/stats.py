@@ -13,7 +13,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 
 @router.get("/stats")
-def get_stats():
+def get_stats() -> dict[str, dict[str, dict[str, int]]]:
     """Retorna estatísticas de entregas por tópico."""
     migrate("broker", MIGRATIONS_DIR)
 
@@ -40,7 +40,7 @@ def get_stats():
             """
         ).fetchall()
 
-    stats = {}
+    stats: dict[str, dict[str, int]] = {}
 
     for topic, status, total in rows:
         if topic not in stats:

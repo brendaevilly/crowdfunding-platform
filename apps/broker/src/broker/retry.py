@@ -24,7 +24,7 @@ def retry_delay(attempt: int) -> int:
     )
 
     return min(
-        base * (2 ** max(0, attempt - 1)),
+        base * (1 << max(0, attempt - 1)),
         maximum,
     )
 

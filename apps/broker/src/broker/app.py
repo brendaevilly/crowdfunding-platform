@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -45,11 +46,11 @@ async def run_dispatcher() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Gerencia a inicialização e o encerramento do broker."""
     migrate("broker", MIGRATIONS_DIR)
 
-    task = None
+    task: asyncio.Task[None] | None = None
 
     if dispatcher_enabled():
         task = asyncio.create_task(run_dispatcher())
