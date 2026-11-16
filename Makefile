@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck format test e2e check dev
+.PHONY: install lint typecheck format test e2e check dev contratos
 
 install:            ## dependências + git hooks (rode uma vez após clonar)
 	uv sync --all-packages
@@ -25,3 +25,6 @@ check: lint test    ## rode antes de abrir o PR
 
 dev:                ## sobe todos os microsserviços (issue F07)
 	uv run python scripts/dev.py up
+
+contratos:          ## regenera docs/contratos a partir de packages/contracts
+	uv run python scripts/gen_contratos_doc.py
