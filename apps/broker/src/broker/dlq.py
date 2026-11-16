@@ -14,10 +14,11 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
 @router.get("/dlq")
 def list_dlq():
-    """Lista as entregas que esgotaram as tentativas."""
+    """Lista entregas que atingiram o limite de tentativas."""
     migrate("broker", MIGRATIONS_DIR)
 
     conn = open_db("broker")
+
     try:
         rows = conn.execute(
             """
@@ -57,7 +58,7 @@ def list_dlq():
 
 @router.post("/dlq/{delivery_id}/replay")
 def replay_dlq(delivery_id: int):
-    """Recoloca uma entrega da DLQ na fila de pendentes."""
+    """Recoloca uma entrega da DLQ na fila de processamento."""
     migrate("broker", MIGRATIONS_DIR)
 
     def replay(conn):
@@ -67,12 +68,14 @@ def replay_dlq(delivery_id: int):
             SET status = 'pending',
                 attempts = 0,
                 next_attempt_at = NULL,
-                last_error = NULL
+                last_error = NULL,
+                lease_token = NULL
             WHERE id = ?
               AND status = 'dlq'
             """,
             (delivery_id,),
         )
+
         return cursor.rowcount == 1
 
     if not transaction(replay, "broker"):
