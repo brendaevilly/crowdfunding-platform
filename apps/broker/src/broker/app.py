@@ -1,11 +1,11 @@
 
-
 """Aplicação HTTP do broker local de mensagens."""
 
 import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -19,6 +19,15 @@ from shared.http.app import create_app
 
 logger = logging.getLogger(__name__)
 
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+
+
+def dispatcher_enabled() -> bool:
+    """Verifica se o dispatcher automático está habilitado."""
+    return os.getenv(
+        "BROKER_DISPATCH_ENABLED", "true"
+    ).lower() in ("true", "1", "yes")
+
 
 async def run_dispatcher() -> None:
     """Executa periodicamente as entregas pendentes."""
@@ -30,6 +39,8 @@ async def run_dispatcher() -> None:
     while True:
         try:
             await asyncio.to_thread(dispatch_pending)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Erro ao executar dispatcher")
 
@@ -38,24 +49,29 @@ async def run_dispatcher() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicia e encerra o dispatcher junto com o broker."""
-    from pathlib import Path
+    """Gerencia a inicialização e o encerramento do broker."""
+    migrate("broker", MIGRATIONS_DIR)
 
-    migrations_dir = (
-        Path(__file__).resolve().parents[2] / "migrations"
-    )
-    migrate("broker", migrations_dir)
+    task = None
 
-    task = asyncio.create_task(run_dispatcher())
+    if dispatcher_enabled():
+        task = asyncio.create_task(run_dispatcher())
+        logger.info("Dispatcher automático iniciado")
+    else:
+        logger.info("Dispatcher automático desabilitado")
 
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        if task is not None:
+            task.cancel()
+
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+            logger.info("Dispatcher automático encerrado")
 
 
 app = create_app("broker", version="0.1.0")
