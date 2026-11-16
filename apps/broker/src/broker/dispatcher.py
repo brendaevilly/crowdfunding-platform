@@ -89,7 +89,7 @@ def reserve_delivery(
         UPDATE broker_deliveries
         SET status = 'processing',
             next_attempt_at = ?,
-            last_error = ?
+            lease_token = ?
         WHERE id = ?
         """,
         (expires_at, token, row[0]),
@@ -161,10 +161,11 @@ def dispatch_pending() -> int:
                     SET attempts = ?,
                         status = ?,
                         next_attempt_at = ?,
-                        last_error = ?
+                        last_error = ?,
+                        lease_token = NULL
                     WHERE id = ?
                       AND status = 'processing'
-                      AND last_error = ?
+                      AND lease_token = ?
                     """,
                     (
                         new_attempts,
@@ -207,10 +208,11 @@ def dispatch_pending() -> int:
                     attempts = attempts + 1,
                     next_attempt_at = NULL,
                     delivered_at = CURRENT_TIMESTAMP,
-                    last_error = NULL
+                    last_error = NULL,
+                    lease_token = NULL
                 WHERE id = ?
                   AND status = 'processing'
-                  AND last_error = ?
+                  AND lease_token = ?
                 """,
                 (delivery_id, token),
             )
