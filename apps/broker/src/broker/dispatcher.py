@@ -67,7 +67,16 @@ def dispatch_pending() -> int:
                 json=body,
                 timeout=5.0,
             )
-            response.raise_for_status()
+
+            if not 200 <= response.status_code < 300:
+                raise httpx.HTTPStatusError(
+                    (
+                        "Entrega não confirmada: "
+                        f"HTTP {response.status_code}"
+                    ),
+                    request=response.request,
+                    response=response,
+                )
 
         except httpx.HTTPError as exc:
             new_attempts = attempts + 1
@@ -102,9 +111,11 @@ def dispatch_pending() -> int:
                     (
                         new_attempts,
                         "dlq" if exhausted else "pending",
-                        None
-                        if exhausted
-                        else next_attempt_at(new_attempts),
+                        (
+                            None
+                            if exhausted
+                            else next_attempt_at(new_attempts)
+                        ),
                         str(exc),
                         delivery_id,
                     ),
