@@ -12,20 +12,15 @@ from shared.db import open_db
 def test_publish_cria_entregas_e_evita_duplicacao(
     tmp_path, monkeypatch
 ):
+    """Publica um evento e evita entregas duplicadas."""
     monkeypatch.chdir(tmp_path)
-
-    client = TestClient(app)
+    monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
 
     assinatura = {
         "service": "notificacao",
         "topic": "AporteConfirmado",
         "url": "http://localhost:3005",
     }
-
-    resposta = client.post(
-        "/subscriptions", json=assinatura
-    )
-    assert resposta.status_code == 201
 
     evento = {
         "eventId": "evento-001",
@@ -34,17 +29,31 @@ def test_publish_cria_entregas_e_evita_duplicacao(
         "correlationId": "correlation-001",
     }
 
-    primeira = client.post("/publish", json=evento)
+    with TestClient(app) as client:
+        resposta = client.post(
+            "/subscriptions",
+            json=assinatura,
+        )
 
-    assert primeira.status_code == 201
-    assert primeira.json()["created"] is True
-    assert primeira.json()["deliveries"] == 1
+        assert resposta.status_code == 201
 
-    segunda = client.post("/publish", json=evento)
+        primeira = client.post(
+            "/publish",
+            json=evento,
+        )
 
-    assert segunda.status_code == 201
-    assert segunda.json()["created"] is False
-    assert segunda.json()["deliveries"] == 0
+        assert primeira.status_code == 201
+        assert primeira.json()["created"] is True
+        assert primeira.json()["deliveries"] == 1
+
+        segunda = client.post(
+            "/publish",
+            json=evento,
+        )
+
+        assert segunda.status_code == 201
+        assert segunda.json()["created"] is False
+        assert segunda.json()["deliveries"] == 0
 
     with closing(open_db("broker")) as conn:
         total_eventos = conn.execute(
@@ -55,5 +64,10 @@ def test_publish_cria_entregas_e_evita_duplicacao(
             "SELECT COUNT(*) FROM broker_deliveries"
         ).fetchone()[0]
 
+        status_entrega = conn.execute(
+            "SELECT status FROM broker_deliveries"
+        ).fetchone()[0]
+
     assert total_eventos == 1
     assert total_entregas == 1
+    assert status_entrega == "pending"
