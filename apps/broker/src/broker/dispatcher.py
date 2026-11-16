@@ -6,7 +6,7 @@ import logging
 import os
 import sqlite3
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -17,10 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    """Retorna a data e hora atual em UTC."""
+    return datetime.now(UTC)
 
 
 def db_timestamp(value: datetime) -> str:
+    """Converte uma data para o formato usado no SQLite."""
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -98,6 +100,63 @@ def reserve_delivery(
     return (*row, token)
 
 
+def mark_failure(
+    conn: sqlite3.Connection,
+    delivery_id: int,
+    token: str,
+    attempts: int,
+    exhausted: bool,
+    error_message: str,
+) -> bool:
+    """Registra falha e agenda retry ou envia para a DLQ."""
+    cursor = conn.execute(
+        """
+        UPDATE broker_deliveries
+        SET attempts = ?,
+            status = ?,
+            next_attempt_at = ?,
+            last_error = ?,
+            lease_token = NULL
+        WHERE id = ?
+          AND status = 'processing'
+          AND lease_token = ?
+        """,
+        (
+            attempts,
+            "dlq" if exhausted else "pending",
+            None if exhausted else next_attempt_at(attempts),
+            error_message,
+            delivery_id,
+            token,
+        ),
+    )
+    return cursor.rowcount == 1
+
+
+def mark_delivered(
+    conn: sqlite3.Connection,
+    delivery_id: int,
+    token: str,
+) -> bool:
+    """Confirma uma entrega somente se a reserva ainda for válida."""
+    cursor = conn.execute(
+        """
+        UPDATE broker_deliveries
+        SET status = 'delivered',
+            attempts = attempts + 1,
+            next_attempt_at = NULL,
+            delivered_at = CURRENT_TIMESTAMP,
+            last_error = NULL,
+            lease_token = NULL
+        WHERE id = ?
+          AND status = 'processing'
+          AND lease_token = ?
+        """,
+        (delivery_id, token),
+    )
+    return cursor.rowcount == 1
+
+
 def dispatch_pending() -> int:
     """Processa entregas disponíveis com reserva SQLite."""
     delivered = 0
@@ -153,36 +212,19 @@ def dispatch_pending() -> int:
         except httpx.HTTPError as exc:
             new_attempts = attempts + 1
             exhausted = new_attempts >= max_attempts()
+            error_message = str(exc)
 
-            def mark_failure(conn):
-                cursor = conn.execute(
-                    """
-                    UPDATE broker_deliveries
-                    SET attempts = ?,
-                        status = ?,
-                        next_attempt_at = ?,
-                        last_error = ?,
-                        lease_token = NULL
-                    WHERE id = ?
-                      AND status = 'processing'
-                      AND lease_token = ?
-                    """,
-                    (
-                        new_attempts,
-                        "dlq" if exhausted else "pending",
-                        (
-                            None
-                            if exhausted
-                            else next_attempt_at(new_attempts)
-                        ),
-                        str(exc),
-                        delivery_id,
-                        token,
-                    ),
+            def save_failure(conn):
+                return mark_failure(
+                    conn,
+                    delivery_id,
+                    token,
+                    new_attempts,
+                    exhausted,
+                    error_message,
                 )
-                return cursor.rowcount == 1
 
-            updated = transaction(mark_failure, "broker")
+            updated = transaction(save_failure, "broker")
 
             if updated:
                 if exhausted:
@@ -195,30 +237,19 @@ def dispatch_pending() -> int:
                     logger.warning(
                         "Falha ao entregar evento %s: %s",
                         event_id,
-                        exc,
+                        error_message,
                     )
 
             continue
 
-        def mark_delivered(conn):
-            cursor = conn.execute(
-                """
-                UPDATE broker_deliveries
-                SET status = 'delivered',
-                    attempts = attempts + 1,
-                    next_attempt_at = NULL,
-                    delivered_at = CURRENT_TIMESTAMP,
-                    last_error = NULL,
-                    lease_token = NULL
-                WHERE id = ?
-                  AND status = 'processing'
-                  AND lease_token = ?
-                """,
-                (delivery_id, token),
+        def save_delivery(conn):
+            return mark_delivered(
+                conn,
+                delivery_id,
+                token,
             )
-            return cursor.rowcount == 1
 
-        if transaction(mark_delivered, "broker"):
+        if transaction(save_delivery, "broker"):
             delivered += 1
 
     return delivered
