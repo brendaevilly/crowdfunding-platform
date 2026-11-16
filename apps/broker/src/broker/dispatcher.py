@@ -7,6 +7,7 @@ import os
 import sqlite3
 import uuid
 from datetime import UTC, datetime, timedelta
+from functools import partial
 
 import httpx
 
@@ -163,11 +164,10 @@ def dispatch_pending() -> int:
     processed: set[int] = set()
 
     while True:
-
-        def reserve(conn):
-            return reserve_delivery(conn, processed)
-
-        delivery = transaction(reserve, "broker")
+        delivery = transaction(
+            partial(reserve_delivery, excluded_ids=processed),
+            "broker",
+        )
 
         if delivery is None:
             break
@@ -214,17 +214,17 @@ def dispatch_pending() -> int:
             exhausted = new_attempts >= max_attempts()
             error_message = str(exc)
 
-            def save_failure(conn):
-                return mark_failure(
-                    conn,
-                    delivery_id,
-                    token,
-                    new_attempts,
-                    exhausted,
-                    error_message,
-                )
-
-            updated = transaction(save_failure, "broker")
+            updated = transaction(
+                partial(
+                    mark_failure,
+                    delivery_id=delivery_id,
+                    token=token,
+                    attempts=new_attempts,
+                    exhausted=exhausted,
+                    error_message=error_message,
+                ),
+                "broker",
+            )
 
             if updated:
                 if exhausted:
@@ -242,14 +242,16 @@ def dispatch_pending() -> int:
 
             continue
 
-        def save_delivery(conn):
-            return mark_delivered(
-                conn,
-                delivery_id,
-                token,
-            )
+        updated = transaction(
+            partial(
+                mark_delivered,
+                delivery_id=delivery_id,
+                token=token,
+            ),
+            "broker",
+        )
 
-        if transaction(save_delivery, "broker"):
+        if updated:
             delivered += 1
 
     return delivered
