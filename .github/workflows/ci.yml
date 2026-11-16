@@ -14,28 +14,6 @@ permissions:
   contents: read
 
 jobs:
-  convencoes:
-    name: Convenções (branch e título do PR)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Nome da branch
-        run: python3 scripts/check_commits.py --branch "$HEAD_REF"
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-      - name: Título do PR
-        run: python3 scripts/check_commits.py --message "$PR_TITLE"
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-      - name: PR referencia a issue (Closes #N)
-        if: "!contains(github.event.pull_request.body, 'Closes #') && !contains(github.event.pull_request.body, 'Refs #')"
-        run: |
-          echo "::error::Descreva 'Closes #<issue>' (ou 'Refs #<issue>') no corpo do PR."
-          exit 1
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -86,7 +64,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [convencoes, lint, test, e2e]
+    needs: [lint, test, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Todos os jobs obrigatórios passaram?

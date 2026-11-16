@@ -21,7 +21,7 @@ Plataforma de crowdfunding com custódia (escrow) dos aportes, construída como 
 git clone <repo> && cd <repo>
 make install     # instala dependências e ativa os git hooks (obrigatório, uma vez)
 make check       # lint + testes: deve passar antes de qualquer trabalho
-make dev         # sobe todos os microsserviços (disponível após a issue F07)
+make dev         # sobe todos os microsserviços (broker, serviços e gateway)
 ```
 
 Comandos do dia a dia:
@@ -32,7 +32,7 @@ Comandos do dia a dia:
 | `make lint` / `make format` | verifica (ruff + mypy) / corrige estilo (ruff) |
 | `make test` | testes unitários e de integração |
 | `make e2e` | sobe tudo e roda os testes ponta a ponta |
-| `make dev` | sobe todos os serviços |
+| `make dev` | sobe todos os serviços (Ctrl+C derruba tudo) |
 
 ## Estrutura do repositório
 
@@ -47,6 +47,20 @@ services.json         nome do serviço → URL/porta (nenhuma URL fixa no códig
 ```
 
 Cada app depende **só** de `packages/*` e nunca importa outro app; `tests/test_arquitetura.py` verifica isso a cada `make check`.
+
+## Rodando o sistema local
+
+`make dev` (ou `uv run python scripts/dev.py up`) sobe o broker, espera o `/health`, sobe os 5 serviços de negócio em paralelo e por fim o gateway, com logs prefixados por serviço (também gravados em `logs/<servico>.log`). **Ctrl+C** derruba tudo em ordem inversa, sem deixar processo órfão nem porta ocupada.
+
+| Comando | O que faz |
+|---|---|
+| `python scripts/dev.py up [--restart]` | sobe tudo; com `--restart` reinicia serviço que morrer (backoff de 1s a 30s) |
+| `python scripts/dev.py only aportes custodia_retornos` | sobe só os serviços indicados |
+| `python scripts/dev.py kill <servico>` | derruba um serviço (com o launcher rodando em outro terminal) |
+| `python scripts/dev.py start <servico>` | sobe de novo um serviço derrubado |
+| `python scripts/dev.py status` | estado de cada serviço |
+
+`kill`, `start` e `status` falam com o launcher pela porta de controle `3090` (`DEV_CONTROL_PORT`). Um app sem `src/<app>/main.py` sobe como *placeholder* (`shared.http.placeholder`, só `/health`); quando o serviço real existir, basta criar o `main.py` chamando `shared.http.run(app, "<app>")`.
 
 ## Fluxo de desenvolvimento
 
@@ -171,5 +185,5 @@ Ao começar uma issue, mova-a para *In progress* (ou comente); se descobrir trab
 | Commit recusado pelo hook | Assunto fora do padrão; veja os exemplos acima. Sem hook? Rode `make install` |
 | CI falha em "Convenções" | Rebase interativo e `reword` nos commits; título do PR e branch também são validados |
 | `git push` recusado pelo hook | Nome da branch fora de `feature/<nº>-slug` (`git branch -m novo-nome`) ou lint falhando (`make format`) |
-| Porta já em uso ao rodar `make dev` | Sobrou processo de uma execução anterior; encerre-o ou use `python scripts/dev.py kill <serviço>` |
+| Porta já em uso ao rodar `make dev` | Sobrou processo de uma execução anterior; encerre-o (o launcher avisa qual porta está ocupada) |
 | Branch desatualizada no PR | `git fetch && git rebase origin/main && git push --force-with-lease` |
