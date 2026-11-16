@@ -60,7 +60,7 @@ Processo próprio, HTTP + SQLite (`data/broker.db`):
 3. sobe o `gateway`;
 4. mostra logs com prefixo colorido por serviço; Ctrl+C derruba tudo em ordem inversa.
 
-Também: `python scripts/dev.py only aportes custodia_retornos` (sobe só alguns) e `python scripts/dev.py kill custodia_retornos` (para testar resiliência: derrubar um serviço e ver o broker reentregar quando voltar). É o substituto local do "falha parcial não compromete o todo" (RNF7).
+Também: `python scripts/dev.py only aportes custodia_retornos` (sobe só alguns), `python scripts/dev.py kill custodia_retornos` e `python scripts/dev.py start custodia_retornos` (para testar resiliência: derrubar um serviço e ver o broker reentregar quando voltar), `status` e a opção `--restart` (reinicia serviço que morrer com backoff). É o substituto local do "falha parcial não compromete o todo" (RNF7).
 
 ## 7. Tempo (prazo das campanhas)
 
