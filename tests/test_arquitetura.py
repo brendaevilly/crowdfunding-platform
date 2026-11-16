@@ -60,6 +60,14 @@ def test_app_declara_so_dependencias_de_packages(app):
 
 
 @pytest.mark.parametrize("app", APPS)
+def test_app_usa_os_schemas_de_packages_contracts(app):
+    projeto = _pyproject(RAIZ / "apps" / app)["project"]
+    assert isinstance(projeto, dict)
+    declaradas = {_nome_dependencia(d) for d in projeto["dependencies"]}
+    assert "crowdfunding-contracts" in declaradas
+
+
+@pytest.mark.parametrize("app", APPS)
 def test_app_nao_importa_outro_app(app):
     outros = set(APPS) - {app}
     for arquivo in (RAIZ / "apps" / app).rglob("*.py"):
