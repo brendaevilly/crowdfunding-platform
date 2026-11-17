@@ -1,4 +1,3 @@
-
 """Integração do messaging com o ciclo de vida do FastAPI."""
 
 import asyncio

@@ -1,4 +1,3 @@
-
 """Testes do consumo idempotente de eventos."""
 
 import sqlite3
@@ -45,9 +44,7 @@ def contar_efeitos(data_dir) -> int:
     """Conta quantos efeitos foram persistidos."""
 
     def contar(conn: sqlite3.Connection) -> int:
-        row = conn.execute(
-            "SELECT COUNT(*) FROM efeitos_teste"
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) FROM efeitos_teste").fetchone()
         return row[0]
 
     return transaction(contar, "aportes", data_dir)
@@ -66,9 +63,7 @@ def test_tres_entregas_produzem_um_efeito(data_dir):
                 lambda tx: registrar_efeito(tx, "evento-123"),
             )
 
-        resultados.append(
-            transaction(processar, "aportes", data_dir)
-        )
+        resultados.append(transaction(processar, "aportes", data_dir))
 
     assert resultados == [
         (True, None),

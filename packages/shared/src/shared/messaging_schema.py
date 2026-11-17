@@ -1,4 +1,3 @@
-
 """Instalação das tabelas compartilhadas de messaging."""
 
 import re
@@ -16,9 +15,7 @@ def install_messaging_schema(
 ) -> list[int]:
     """Aplica migrations de messaging no banco de um serviço."""
     if not MIGRATIONS_DIR.is_dir():
-        raise FileNotFoundError(
-            f"Migrations de messaging não encontradas: {MIGRATIONS_DIR}"
-        )
+        raise FileNotFoundError(f"Migrations de messaging não encontradas: {MIGRATIONS_DIR}")
 
     files: dict[int, Path] = {}
 
@@ -63,9 +60,7 @@ def install_messaging_schema(
         for version, path in sorted(files.items()):
             if version in applied:
                 if applied[version] != path.name:
-                    raise ValueError(
-                        f"Versão {version} já usada por outro arquivo"
-                    )
+                    raise ValueError(f"Versão {version} já usada por outro arquivo")
                 continue
 
             script = path.read_text(encoding="utf-8")

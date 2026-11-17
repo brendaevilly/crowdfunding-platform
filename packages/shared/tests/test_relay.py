@@ -1,4 +1,3 @@
-
 """Testes do relay da outbox transacional."""
 
 import sqlite3

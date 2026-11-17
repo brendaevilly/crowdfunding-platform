@@ -1,4 +1,3 @@
-
 """Testes da outbox transacional."""
 
 import json
@@ -22,10 +21,7 @@ def test_outbox_registra_evento_na_transacao(data_dir):
     """Evento é salvo junto com a operação de negócio."""
 
     def salvar(conn: sqlite3.Connection):
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS campanhas_teste "
-            "(id TEXT PRIMARY KEY)"
-        )
+        conn.execute("CREATE TABLE IF NOT EXISTS campanhas_teste (id TEXT PRIMARY KEY)")
         conn.execute(
             "INSERT INTO campanhas_teste (id) VALUES (?)",
             ("campanha-1",),
@@ -86,9 +82,7 @@ def test_outbox_rollback_desfaz_evento(data_dir):
         transaction(salvar_com_erro, "campanhas", data_dir)
 
     def contar(conn: sqlite3.Connection):
-        return conn.execute(
-            "SELECT COUNT(*) FROM outbox_evento"
-        ).fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM outbox_evento").fetchone()[0]
 
     assert transaction(contar, "campanhas", data_dir) == 0
 
@@ -102,8 +96,6 @@ def test_messaging_migrations_sao_idempotentes(tmp_path):
     assert segunda == []
 
     def contar(conn: sqlite3.Connection):
-        return conn.execute(
-            "SELECT COUNT(*) FROM messaging_schema_migrations"
-        ).fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM messaging_schema_migrations").fetchone()[0]
 
     assert transaction(contar, "aportes", tmp_path) == 2

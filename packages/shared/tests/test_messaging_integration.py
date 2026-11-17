@@ -1,4 +1,3 @@
-
 """Testes de integração entre outbox, broker e consumidor."""
 
 import sqlite3
@@ -184,11 +183,14 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
 
         event_id = salvar_evento(data_dir)
 
-        assert publish_pending(
-            "campanhas",
-            "http://broker",
-            data_dir,
-        ) == 1
+        assert (
+            publish_pending(
+                "campanhas",
+                "http://broker",
+                data_dir,
+            )
+            == 1
+        )
 
         assert consultar_status(data_dir, event_id) == "PUBLICADO"
 
@@ -196,9 +198,7 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
         assert dispatch_pending() == 0
 
         def contar_efeitos(conn: sqlite3.Connection):
-            return conn.execute(
-                "SELECT COUNT(*) FROM efeitos_integracao"
-            ).fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM efeitos_integracao").fetchone()[0]
 
         assert transaction(contar_efeitos, "aportes", data_dir) == 1
 
@@ -213,7 +213,4 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
                 (event_id,),
             ).fetchone()[0]
 
-        assert (
-            transaction(consultar_entrega, "broker", data_dir)
-            == "delivered"
-        )
+        assert transaction(consultar_entrega, "broker", data_dir) == "delivered"

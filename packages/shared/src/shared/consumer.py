@@ -1,4 +1,3 @@
-
 """Registro de assinaturas e consumo idempotente de eventos."""
 
 import logging

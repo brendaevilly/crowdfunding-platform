@@ -1,4 +1,3 @@
-
 """Teste de recuperação de eventos pendentes da outbox."""
 
 import sqlite3

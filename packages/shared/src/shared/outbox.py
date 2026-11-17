@@ -1,4 +1,3 @@
-
 """Persistência de eventos na outbox transacional."""
 
 import json

@@ -1,4 +1,3 @@
-
 """Controle de idempotência para consumidores de eventos."""
 
 import sqlite3

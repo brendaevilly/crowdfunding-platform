@@ -1,4 +1,3 @@
-
 """Testes da rota de consumo idempotente de eventos."""
 
 import sqlite3
@@ -60,15 +59,9 @@ def test_tres_entregas_produzem_um_efeito(tmp_path):
     }
 
     with TestClient(app) as client:
-        respostas = [
-            client.post("/events", json=evento)
-            for _ in range(3)
-        ]
+        respostas = [client.post("/events", json=evento) for _ in range(3)]
 
-    assert all(
-        resposta.status_code == 200
-        for resposta in respostas
-    )
+    assert all(resposta.status_code == 200 for resposta in respostas)
 
     assert [resposta.json()["processed"] for resposta in respostas] == [
         True,
@@ -77,8 +70,6 @@ def test_tres_entregas_produzem_um_efeito(tmp_path):
     ]
 
     def contar(conn: sqlite3.Connection) -> int:
-        return conn.execute(
-            "SELECT COUNT(*) FROM efeitos_teste"
-        ).fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM efeitos_teste").fetchone()[0]
 
     assert transaction(contar, "aportes", tmp_path) == 1

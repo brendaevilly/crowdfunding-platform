@@ -1,4 +1,3 @@
-
 """Publicação de eventos pendentes da outbox no broker."""
 
 import json
