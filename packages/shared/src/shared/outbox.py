@@ -5,6 +5,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -35,9 +36,7 @@ def add(
         "eventId": event_id,
         "tipo": evento.tipo_evento,
         "versão": evento.versao,
-        "ocorridoEm": __import__("datetime").datetime.now(
-            __import__("datetime").UTC
-        ).isoformat(),
+        "ocorridoEm": datetime.now(UTC).isoformat(),
         "correlationId": evento.correlation_id,
         "payload": evento.payload,
     }
