@@ -3,12 +3,9 @@
 
 import sqlite3
 from collections.abc import Callable
-from typing import TypeVar
-
-T = TypeVar("T")
 
 
-def consume_once(
+def consume_once[T](
     chave: str,
     tx: sqlite3.Connection,
     fn: Callable[[sqlite3.Connection], T],
@@ -40,7 +37,7 @@ def consume_once(
     return True, resultado
 
 
-def consumeOnce(
+def consumeOnce[T](
     chave: str,
     tx: sqlite3.Connection,
     fn: Callable[[sqlite3.Connection], T],
