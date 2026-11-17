@@ -118,7 +118,7 @@ def create_events_router(
 
         try:
             processed = transaction(process, service, data_dir)
-        except (sqlite3.Error, ValueError):
+        except Exception:
             logger.exception(
                 "Erro ao processar evento %s",
                 delivery.eventId,
