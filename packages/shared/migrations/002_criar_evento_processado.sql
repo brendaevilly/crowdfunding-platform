@@ -1,0 +1,5 @@
+
+CREATE TABLE IF NOT EXISTS evento_processado (
+    chave TEXT PRIMARY KEY,
+    processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
