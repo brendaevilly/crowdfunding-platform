@@ -2,7 +2,6 @@
 """Instalação das tabelas compartilhadas de messaging."""
 
 import re
-import sqlite3
 from contextlib import closing
 from pathlib import Path
 
