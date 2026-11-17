@@ -2,6 +2,7 @@
 
 import sqlite3
 from functools import partial
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ from shared.messaging_schema import install_messaging_schema
 
 
 @pytest.fixture
-def data_dir(tmp_path):
+def data_dir(tmp_path: Path) -> Path:
     """Prepara o banco temporário para cada teste."""
     install_messaging_schema("aportes", tmp_path)
 
@@ -40,23 +41,24 @@ def registrar_efeito(
     )
 
 
-def contar_efeitos(data_dir) -> int:
+def contar_efeitos(data_dir: Path) -> int:
     """Conta quantos efeitos foram persistidos."""
 
     def contar(conn: sqlite3.Connection) -> int:
         row = conn.execute("SELECT COUNT(*) FROM efeitos_teste").fetchone()
-        return row[0]
+        assert row is not None
+        return int(row[0])
 
     return transaction(contar, "aportes", data_dir)
 
 
-def test_tres_entregas_produzem_um_efeito(data_dir):
+def test_tres_entregas_produzem_um_efeito(data_dir: Path) -> None:
     """Três entregas do mesmo evento geram um único efeito."""
     resultados = []
 
     for _ in range(3):
 
-        def processar(conn: sqlite3.Connection):
+        def processar(conn: sqlite3.Connection) -> tuple[bool, None]:
             return consume_once(
                 "evento-123",
                 conn,
@@ -76,7 +78,7 @@ def test_tres_entregas_produzem_um_efeito(data_dir):
 def processar_evento(
     conn: sqlite3.Connection,
     evento_id: str,
-):
+) -> tuple[bool, None]:
     """Processa um evento com sua chave de idempotência."""
     return consume_once(
         evento_id,
@@ -85,7 +87,7 @@ def processar_evento(
     )
 
 
-def test_eventos_diferentes_sao_processados(data_dir):
+def test_eventos_diferentes_sao_processados(data_dir: Path) -> None:
     """Eventos distintos podem produzir efeitos distintos."""
     for evento_id in ("evento-1", "evento-2"):
         transaction(
@@ -97,11 +99,11 @@ def test_eventos_diferentes_sao_processados(data_dir):
     assert contar_efeitos(data_dir) == 2
 
 
-def test_falha_desfaz_chave_e_efeito(data_dir):
+def test_falha_desfaz_chave_e_efeito(data_dir: Path) -> None:
     """Uma falha permite processar o evento novamente."""
 
-    def processar_com_falha(conn: sqlite3.Connection):
-        def efeito(tx: sqlite3.Connection):
+    def processar_com_falha(conn: sqlite3.Connection) -> tuple[bool, None]:
+        def efeito(tx: sqlite3.Connection) -> None:
             registrar_efeito(tx, "evento-falha")
             raise RuntimeError("Falha simulada")
 
@@ -112,7 +114,7 @@ def test_falha_desfaz_chave_e_efeito(data_dir):
 
     assert contar_efeitos(data_dir) == 0
 
-    def tentar_novamente(conn: sqlite3.Connection):
+    def tentar_novamente(conn: sqlite3.Connection) -> tuple[bool, None]:
         return consume_once(
             "evento-falha",
             conn,
@@ -129,10 +131,10 @@ def test_falha_desfaz_chave_e_efeito(data_dir):
     assert contar_efeitos(data_dir) == 1
 
 
-def test_chave_vazia_e_rejeitada(data_dir):
+def test_chave_vazia_e_rejeitada(data_dir: Path) -> None:
     """Chaves de idempotência vazias não são permitidas."""
 
-    def processar(conn: sqlite3.Connection):
+    def processar(conn: sqlite3.Connection) -> tuple[bool, None]:
         return consume_once("", conn, lambda tx: None)
 
     with pytest.raises(

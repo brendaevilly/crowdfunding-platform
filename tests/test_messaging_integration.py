@@ -1,6 +1,9 @@
 """Testes de integração entre outbox, broker e consumidor."""
 
 import sqlite3
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -17,22 +20,23 @@ from shared.relay import publish_pending
 
 
 @pytest.fixture
-def ambiente(tmp_path, monkeypatch):
+def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Path]]:
     """Inicializa o broker e os bancos isolados."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
 
-    install_messaging_schema("campanhas", tmp_path)
-    install_messaging_schema("aportes", tmp_path)
+    data_dir = tmp_path / "data"
+    install_messaging_schema("campanhas", data_dir)
+    install_messaging_schema("aportes", data_dir)
 
     with TestClient(broker_app) as broker_client:
-        yield broker_client, tmp_path
+        yield broker_client, data_dir
 
 
-def salvar_evento(data_dir):
+def salvar_evento(data_dir: Path) -> str:
     """Grava um evento na outbox de campanhas."""
 
-    def salvar(conn: sqlite3.Connection):
+    def salvar(conn: sqlite3.Connection) -> str:
         return add(
             conn,
             OutboxEvent(
@@ -46,28 +50,32 @@ def salvar_evento(data_dir):
     return transaction(salvar, "campanhas", data_dir)
 
 
-def consultar_status(data_dir, event_id):
+def consultar_status(data_dir: Path, event_id: str) -> str:
     """Consulta o estado de um evento na outbox."""
 
-    def consultar(conn: sqlite3.Connection):
-        return conn.execute(
+    def consultar(conn: sqlite3.Connection) -> str:
+        row = conn.execute(
             """
             SELECT status
             FROM outbox_evento
             WHERE outbox_id = ?
             """,
             (event_id,),
-        ).fetchone()[0]
+        ).fetchone()
+        assert row is not None
+        return str(row[0])
 
     return transaction(consultar, "campanhas", data_dir)
 
 
-def test_publicacao_real_no_broker(ambiente, monkeypatch):
+def test_publicacao_real_no_broker(
+    ambiente: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """O relay publica no broker e confirma a outbox."""
     broker_client, data_dir = ambiente
     event_id = salvar_evento(data_dir)
 
-    def post_local(url, json, timeout):
+    def post_local(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         response = broker_client.post("/publish", json=json)
         return httpx.Response(
             response.status_code,
@@ -86,16 +94,18 @@ def test_publicacao_real_no_broker(ambiente, monkeypatch):
     assert publicados == 1
     assert consultar_status(data_dir, event_id) == "PUBLICADO"
 
-    def contar(conn: sqlite3.Connection):
-        return conn.execute(
+    def contar(conn: sqlite3.Connection) -> int:
+        row = conn.execute(
             "SELECT COUNT(*) FROM broker_events WHERE event_id = ?",
             (event_id,),
-        ).fetchone()[0]
+        ).fetchone()
+        assert row is not None
+        return int(row[0])
 
     assert transaction(contar, "broker", data_dir) == 1
 
 
-def test_broker_nao_duplica_evento(ambiente):
+def test_broker_nao_duplica_evento(ambiente: tuple[TestClient, Path]) -> None:
     """O broker armazena um eventId somente uma vez."""
     broker_client, data_dir = ambiente
 
@@ -114,20 +124,24 @@ def test_broker_nao_duplica_evento(ambiente):
     assert primeira.json()["created"] is True
     assert segunda.json()["created"] is False
 
-    def contar(conn: sqlite3.Connection):
-        return conn.execute(
+    def contar(conn: sqlite3.Connection) -> int:
+        row = conn.execute(
             "SELECT COUNT(*) FROM broker_events WHERE event_id = ?",
             ("evento-duplicado",),
-        ).fetchone()[0]
+        ).fetchone()
+        assert row is not None
+        return int(row[0])
 
     assert transaction(contar, "broker", data_dir) == 1
 
 
-def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
+def test_fluxo_completo_com_broker_real(
+    ambiente: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Outbox, relay, broker e consumidor funcionam juntos."""
     broker_client, data_dir = ambiente
 
-    def preparar(conn: sqlite3.Connection):
+    def preparar(conn: sqlite3.Connection) -> None:
         conn.execute(
             """
             CREATE TABLE efeitos_integracao (
@@ -139,7 +153,7 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
 
     transaction(preparar, "aportes", data_dir)
 
-    def handler(conn: sqlite3.Connection, payload: dict):
+    def handler(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
         conn.execute(
             "INSERT INTO efeitos_integracao (campanha_id) VALUES (?)",
             (payload["campanhaId"],),
@@ -165,7 +179,7 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
         )
         assert assinatura.status_code == 201
 
-        def post_local(url, json, timeout):
+        def post_local(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
             if url == "http://broker/publish":
                 response = broker_client.post("/publish", json=json)
             elif url == "http://consumer/events":
@@ -197,13 +211,15 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
         assert dispatch_pending() == 1
         assert dispatch_pending() == 0
 
-        def contar_efeitos(conn: sqlite3.Connection):
-            return conn.execute("SELECT COUNT(*) FROM efeitos_integracao").fetchone()[0]
+        def contar_efeitos(conn: sqlite3.Connection) -> int:
+            row = conn.execute("SELECT COUNT(*) FROM efeitos_integracao").fetchone()
+            assert row is not None
+            return int(row[0])
 
         assert transaction(contar_efeitos, "aportes", data_dir) == 1
 
-        def consultar_entrega(conn: sqlite3.Connection):
-            return conn.execute(
+        def consultar_entrega(conn: sqlite3.Connection) -> str:
+            row = conn.execute(
                 """
                 SELECT d.status
                 FROM broker_deliveries AS d
@@ -211,6 +227,8 @@ def test_fluxo_completo_com_broker_real(ambiente, monkeypatch):
                 WHERE e.event_id = ?
                 """,
                 (event_id,),
-            ).fetchone()[0]
+            ).fetchone()
+            assert row is not None
+            return str(row[0])
 
         assert transaction(consultar_entrega, "broker", data_dir) == "delivered"

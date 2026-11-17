@@ -1,6 +1,8 @@
 """Testes da rota de consumo idempotente de eventos."""
 
 import sqlite3
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,7 +12,7 @@ from shared.db import transaction
 from shared.messaging_schema import install_messaging_schema
 
 
-def test_tres_entregas_produzem_um_efeito(tmp_path):
+def test_tres_entregas_produzem_um_efeito(tmp_path: Path) -> None:
     """Três entregas do mesmo evento produzem apenas um efeito."""
     install_messaging_schema("aportes", tmp_path)
 
@@ -28,7 +30,7 @@ def test_tres_entregas_produzem_um_efeito(tmp_path):
 
     def handler(
         conn: sqlite3.Connection,
-        payload: dict,
+        payload: dict[str, Any],
     ) -> None:
         conn.execute(
             "INSERT INTO efeitos_teste (evento_id) VALUES (?)",
@@ -70,6 +72,8 @@ def test_tres_entregas_produzem_um_efeito(tmp_path):
     ]
 
     def contar(conn: sqlite3.Connection) -> int:
-        return conn.execute("SELECT COUNT(*) FROM efeitos_teste").fetchone()[0]
+        row = conn.execute("SELECT COUNT(*) FROM efeitos_teste").fetchone()
+        assert row is not None
+        return int(row[0])
 
     assert transaction(contar, "aportes", tmp_path) == 1

@@ -1,8 +1,11 @@
 """Teste de recuperação de eventos pendentes da outbox."""
 
 import sqlite3
+from pathlib import Path
+from typing import Any
 
 import httpx
+import pytest
 
 from shared.db import transaction
 from shared.messaging_schema import install_messaging_schema
@@ -11,9 +14,9 @@ from shared.relay import publish_pending
 
 
 def test_evento_pendente_e_publicado_apos_reinicio(
-    tmp_path,
-    monkeypatch,
-):
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Evento salvo antes da falha é publicado após retomada."""
     install_messaging_schema("campanhas", tmp_path)
 
@@ -44,21 +47,23 @@ def test_evento_pendente_e_publicado_apos_reinicio(
 
     # Simula uma interrupção antes da publicação.
     # A transação já foi confirmada no banco.
-    def consultar(conn: sqlite3.Connection):
-        return conn.execute(
+    def consultar(conn: sqlite3.Connection) -> str:
+        row = conn.execute(
             """
             SELECT status
             FROM outbox_evento
             WHERE outbox_id = ?
             """,
             (event_id,),
-        ).fetchone()[0]
+        ).fetchone()
+        assert row is not None
+        return str(row[0])
 
     assert transaction(consultar, "campanhas", tmp_path) == "PENDENTE"
 
     eventos_recebidos = []
 
-    def fake_post(url, json, timeout):
+    def fake_post(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         eventos_recebidos.append(json)
         return httpx.Response(
             201,

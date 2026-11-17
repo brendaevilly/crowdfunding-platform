@@ -1,6 +1,8 @@
 """Testes do relay da outbox transacional."""
 
 import sqlite3
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -12,16 +14,16 @@ from shared.relay import publish_pending
 
 
 @pytest.fixture
-def data_dir(tmp_path):
+def data_dir(tmp_path: Path) -> Path:
     """Prepara o banco temporário."""
     install_messaging_schema("campanhas", tmp_path)
     return tmp_path
 
 
-def criar_evento(data_dir):
+def criar_evento(data_dir: Path) -> str:
     """Registra um evento pendente na outbox."""
 
-    def salvar(conn: sqlite3.Connection):
+    def salvar(conn: sqlite3.Connection) -> str:
         return add(
             conn,
             OutboxEvent(
@@ -35,11 +37,11 @@ def criar_evento(data_dir):
     return transaction(salvar, "campanhas", data_dir)
 
 
-def consultar_status(data_dir, event_id):
+def consultar_status(data_dir: Path, event_id: str) -> tuple[Any, ...]:
     """Consulta o status de um evento."""
 
-    def consultar(conn: sqlite3.Connection):
-        return conn.execute(
+    def consultar(conn: sqlite3.Connection) -> tuple[Any, ...] | None:
+        row: tuple[Any, ...] | None = conn.execute(
             """
             SELECT status, published_at
             FROM outbox_evento
@@ -47,16 +49,19 @@ def consultar_status(data_dir, event_id):
             """,
             (event_id,),
         ).fetchone()
+        return row
 
-    return transaction(consultar, "campanhas", data_dir)
+    res = transaction(consultar, "campanhas", data_dir)
+    assert res is not None
+    return res
 
 
-def test_relay_publica_evento_com_sucesso(data_dir, monkeypatch):
+def test_relay_publica_evento_com_sucesso(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Após confirmação do broker, evento vira PUBLICADO."""
     event_id = criar_evento(data_dir)
     requests = []
 
-    def fake_post(url, json, timeout):
+    def fake_post(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         requests.append((url, json))
         return httpx.Response(
             201,
@@ -85,13 +90,13 @@ def test_relay_publica_evento_com_sucesso(data_dir, monkeypatch):
 
 
 def test_relay_mantem_pendente_quando_broker_falha(
-    data_dir,
-    monkeypatch,
-):
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Falha HTTP mantém evento pendente."""
     event_id = criar_evento(data_dir)
 
-    def fake_post(url, json, timeout):
+    def fake_post(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         return httpx.Response(
             503,
             request=httpx.Request("POST", url),
@@ -112,12 +117,12 @@ def test_relay_mantem_pendente_quando_broker_falha(
     )
 
 
-def test_relay_recupera_evento_apos_falha(data_dir, monkeypatch):
+def test_relay_recupera_evento_apos_falha(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Evento pendente pode ser publicado após recuperação."""
     event_id = criar_evento(data_dir)
     tentativas = 0
 
-    def fake_post(url, json, timeout):
+    def fake_post(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         nonlocal tentativas
         tentativas += 1
 
@@ -150,14 +155,14 @@ def test_relay_recupera_evento_apos_falha(data_dir, monkeypatch):
 
 
 def test_relay_nao_republica_evento_confirmado(
-    data_dir,
-    monkeypatch,
-):
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Evento publicado não deve ser enviado novamente."""
     criar_evento(data_dir)
     chamadas = 0
 
-    def fake_post(url, json, timeout):
+    def fake_post(url: str, json: dict[str, Any], timeout: float) -> httpx.Response:
         nonlocal chamadas
         chamadas += 1
 
