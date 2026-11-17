@@ -28,13 +28,19 @@ class AppError(Exception):
     """Erro de negócio com status HTTP e código estável (use nas rotas)."""
 
     def __init__(
-        self, status_code: int, code: str, message: str, details: Any | None = None
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        details: Any | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.details = details
+        self.headers = headers
 
 
 def error_response(
@@ -71,7 +77,9 @@ def _codigo_http(status_code: int) -> str:
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
-        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return error_response(
+            exc.status_code, exc.code, exc.message, exc.details, headers=exc.headers
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:

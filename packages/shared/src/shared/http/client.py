@@ -10,6 +10,16 @@ import httpx
 from shared.config import Settings, service_url
 from shared.correlation import CORRELATION_HEADER, get_correlation_id
 
+# Falhas de rede/timeout do httpx, agrupadas para quem faz proxy ou chamadas síncronas
+# (os apps só dependem de packages/*, então não importam httpx diretamente).
+ERROS_DE_CONEXAO: tuple[type[Exception], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    httpx.RemoteProtocolError,
+)
+ERROS_DE_TIMEOUT: tuple[type[Exception], ...] = (httpx.ReadTimeout, httpx.WriteTimeout)
+
 
 class ServiceClient:
     """Use `ServiceClient('campanhas')` (URL via services.json) ou `base_url=...`.
