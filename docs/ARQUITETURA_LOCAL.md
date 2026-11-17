@@ -50,7 +50,7 @@ Processo próprio, HTTP + SQLite (`data/broker.db`):
 
 ## 5. Gateway local
 
-Único ponto de entrada (`:3000`). Rotas `/api/identidade/*`, `/api/campanhas/*`, `/api/aportes/*`, `/api/retornos/*`, `/api/notificacoes/*` viram proxy para o serviço via `services.json`. Valida JWT (emitido pela Identidade), injeta `x-user-id`/`x-user-perfil`, aplica rate limit simples em memória.
+Único ponto de entrada (`:3000`). Rotas `/api/identidade/*`, `/api/campanhas/*`, `/api/aportes/*`, `/api/retornos/*`, `/api/notificacoes/*` viram proxy para o serviço via `services.json`. Valida JWT (emitido pela Identidade), injeta `x-user-id`/`x-user-perfil`, aplica rate limit simples em memória. O gateway remove só o `/api` ao encaminhar (`/api/aportes` chega ao serviço como `/aportes`). Detalhes, códigos de erro e rotas públicas em [`apps/gateway/README.md`](../apps/gateway/README.md).
 
 ## 6. Orquestração sem Docker
 
