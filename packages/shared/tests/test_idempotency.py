@@ -2,6 +2,7 @@
 """Testes do consumo idempotente de eventos."""
 
 import sqlite3
+from functools import partial
 
 import pytest
 
@@ -77,18 +78,26 @@ def test_tres_entregas_produzem_um_efeito(data_dir):
     assert contar_efeitos(data_dir) == 1
 
 
+def processar_evento(
+    conn: sqlite3.Connection,
+    evento_id: str,
+):
+    """Processa um evento com sua chave de idempotência."""
+    return consume_once(
+        evento_id,
+        conn,
+        partial(registrar_efeito, evento_id=evento_id),
+    )
+
+
 def test_eventos_diferentes_sao_processados(data_dir):
     """Eventos distintos podem produzir efeitos distintos."""
     for evento_id in ("evento-1", "evento-2"):
-
-        def processar(conn: sqlite3.Connection):
-            return consume_once(
-                evento_id,
-                conn,
-                lambda tx: registrar_efeito(tx, evento_id),
-            )
-
-        transaction(processar, "aportes", data_dir)
+        transaction(
+            partial(processar_evento, evento_id=evento_id),
+            "aportes",
+            data_dir,
+        )
 
     assert contar_efeitos(data_dir) == 2
 
