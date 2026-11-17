@@ -1,15 +1,21 @@
 
 """Integração do messaging com o ciclo de vida do FastAPI."""
 
+import asyncio
 import logging
 import threading
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 
-from shared.consumer import EventHandler, create_events_router, register_subscriptions
+from shared.consumer import (
+    EventHandler,
+    create_events_router,
+    register_subscriptions,
+)
+from shared.messaging_schema import install_messaging_schema
 from shared.relay import run_relay
 
 logger = logging.getLogger(__name__)
@@ -35,9 +41,12 @@ def configure_messaging(
 
     original_lifespan = app.router.lifespan_context
 
-    @contextmanager
-    def messaging_lifespan(application: FastAPI) -> Iterator[None]:
+    @asynccontextmanager
+    async def messaging_lifespan(
+        application: FastAPI,
+    ) -> AsyncIterator[None]:
         stop_event = threading.Event()
+
         relay_thread = threading.Thread(
             target=run_relay,
             kwargs={
@@ -50,8 +59,15 @@ def configure_messaging(
             name=f"{service}-outbox-relay",
         )
 
-        with original_lifespan(application):
-            register_subscriptions(
+        async with original_lifespan(application):
+            await asyncio.to_thread(
+                install_messaging_schema,
+                service,
+                data_dir,
+            )
+
+            await asyncio.to_thread(
+                register_subscriptions,
                 service=service,
                 service_url=service_url,
                 broker_url=broker_url,
@@ -65,7 +81,10 @@ def configure_messaging(
                 yield
             finally:
                 stop_event.set()
-                relay_thread.join(timeout=6.0)
+                await asyncio.to_thread(
+                    relay_thread.join,
+                    timeout=6.0,
+                )
                 logger.info("Messaging encerrado: %s", service)
 
     app.router.lifespan_context = messaging_lifespan
