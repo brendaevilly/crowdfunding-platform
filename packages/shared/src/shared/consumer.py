@@ -1,5 +1,6 @@
 """Registro de assinaturas e consumo idempotente de eventos."""
 
+import asyncio
 import logging
 import sqlite3
 from collections.abc import Callable
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from shared.db import transaction
 from shared.idempotency import consume_once
+from shared.resilience import Bulkhead
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +75,18 @@ def create_events_router(
     service: str,
     handlers: dict[str, EventHandler],
     data_dir: str | Path = "data",
+    max_concurrent_per_topic: int = 5,
 ) -> APIRouter:
-    """Cria a rota POST /events com despacho por tópico."""
+    """Cria POST /events com Bulkhead independente por tópico."""
+    if max_concurrent_per_topic < 1:
+        raise ValueError("max_concurrent_per_topic deve ser positivo")
+
     router = APIRouter()
 
+    bulkheads = {topic: Bulkhead(max_concurrent=max_concurrent_per_topic) for topic in handlers}
+
     @router.post("/events")
-    def receive_event(delivery: BrokerDelivery) -> dict[str, str | bool]:
+    async def receive_event(delivery: BrokerDelivery) -> dict[str, str | bool]:
         handler = handlers.get(delivery.topic)
 
         if handler is None:
@@ -115,8 +123,14 @@ def create_events_router(
             )
             return processed
 
+        def execute_transaction() -> bool:
+            return transaction(process, service, data_dir)
+
+        async def process_event() -> bool:
+            return await asyncio.to_thread(execute_transaction)
+
         try:
-            processed = transaction(process, service, data_dir)
+            processed = await bulkheads[delivery.topic].call(process_event)
         except Exception:
             logger.exception(
                 "Erro ao processar evento %s",
