@@ -7,6 +7,7 @@ import sqlite3
 import time
 from collections.abc import Callable
 from contextlib import closing
+from functools import partial
 from pathlib import Path
 
 import httpx
@@ -92,8 +93,7 @@ def publish_pending(
             )
             continue
 
-        def confirm(conn: sqlite3.Connection) -> bool:
-            return mark_published(conn, outbox_id)
+        confirm = partial(mark_published, outbox_id=outbox_id)
 
         if transaction(confirm, service, data_dir):
             published += 1
