@@ -1,4 +1,3 @@
-
 """Execução periódica da reconciliação de aportes."""
 
 import asyncio
@@ -28,9 +27,7 @@ def obter_intervalo_reconciliacao() -> int:
         ) from exc
 
     if intervalo <= 0:
-        raise ValueError(
-            "APORTES_RECONCILIACAO_INTERVALO_SEGUNDOS deve ser maior que zero"
-        )
+        raise ValueError("APORTES_RECONCILIACAO_INTERVALO_SEGUNDOS deve ser maior que zero")
 
     return intervalo
 
@@ -42,9 +39,7 @@ async def executar_reconciliacao_periodica(
 ) -> None:
     """Executa a reconciliação periodicamente até ser cancelada."""
     intervalo = (
-        intervalo_segundos
-        if intervalo_segundos is not None
-        else obter_intervalo_reconciliacao()
+        intervalo_segundos if intervalo_segundos is not None else obter_intervalo_reconciliacao()
     )
 
     if intervalo <= 0:
