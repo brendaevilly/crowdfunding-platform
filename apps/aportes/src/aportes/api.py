@@ -1,9 +1,9 @@
-"""Endpoint HTTP para criação de aportes."""
+"""Endpoints HTTP para criação, histórico e resumo de aportes."""
 
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,6 +12,12 @@ from aportes.cliente_campanhas import (
     ClienteCampanhas,
 )
 from aportes.domain import Valor
+from aportes.historico import (
+    HistoricoPaginado,
+    ResumoCampanha,
+    listar_aportes_investidor,
+    obter_resumo_campanha,
+)
 from aportes.politica_limite_aporte import validar_limite_aporte
 from aportes.processamento import (
     ChaveIdempotenciaConflitante,
@@ -20,6 +26,13 @@ from aportes.processamento import (
     rejeitar_aporte,
 )
 from aportes.status_investidor import investidor_esta_bloqueado
+from shared.auth import (
+    TokenInvalido,
+    segredo_do_ambiente,
+    validar_token,
+)
+
+router = APIRouter()
 
 
 class CriarAporteRequest(BaseModel):
@@ -42,6 +55,10 @@ def criar_router(
     api = APIRouter()
     cliente = cliente_campanhas if cliente_campanhas is not None else ClienteCampanhas()
 
+    # ---------------------------------------------------------
+    # POST /aportes
+    # ---------------------------------------------------------
+
     @api.post("/aportes", status_code=201)
     async def criar_aporte(
         dados: CriarAporteRequest,
@@ -60,7 +77,7 @@ def criar_router(
             )
 
         try:
-            # Consulta primeiro a chave para evitar operações duplicadas.
+            # Verifica se a chave já foi utilizada.
             anterior = consultar_resultado_anterior(
                 idempotency_key=idempotency_key,
                 campanha_id=dados.campanha_id,
@@ -98,13 +115,12 @@ def criar_router(
                     detail=str(exc),
                 ) from exc
 
-            # Consulta Campanhas usando timeout e circuit breaker.
+            # Consulta Campanhas com timeout e circuit breaker.
             try:
                 aceita = await cliente.aceita_aportes(dados.campanha_id)
 
             except CampanhaIndisponivelError:
-                # Fail-safe: não confirma o aporte quando
-                # Campanhas estiver indisponível.
+                # Registra a rejeição de forma idempotente.
                 resultado = rejeitar_aporte(
                     idempotency_key=idempotency_key,
                     campanha_id=dados.campanha_id,
@@ -124,7 +140,7 @@ def criar_router(
                     detail="A campanha não está aberta para aportes.",
                 )
 
-            # Confirma aporte, outbox e pendência de Custódia.
+            # Confirma aporte e registra eventos na outbox.
             resultado = confirmar_aporte(
                 idempotency_key=idempotency_key,
                 campanha_id=dados.campanha_id,
@@ -144,5 +160,87 @@ def criar_router(
                 status_code=409,
                 detail=str(exc),
             ) from exc
+
+    # ---------------------------------------------------------
+    # GET /aportes/meus
+    # ---------------------------------------------------------
+
+    @api.get("/aportes/meus")
+    def meus_aportes(
+        authorization: str | None = Header(
+            default=None,
+            alias="Authorization",
+        ),
+        pagina: int = Query(default=1, ge=1),
+        tamanho_pagina: int = Query(default=10, ge=1, le=100),
+        campanha_id: str | None = Query(default=None),
+    ) -> HistoricoPaginado:
+        """Lista apenas os aportes do investidor autenticado.
+
+        O identificador do investidor é extraído do JWT
+        validado, nunca de um cabeçalho X-User-ID.
+        """
+
+        if authorization is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação obrigatório.",
+            )
+
+        esquema, _, token = authorization.partition(" ")
+
+        if esquema.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido.",
+            )
+
+        segredo, _ = segredo_do_ambiente()
+
+        try:
+            claims = validar_token(
+                token.strip(),
+                segredo=segredo,
+            )
+        except TokenInvalido as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido ou expirado.",
+            ) from exc
+
+        if claims.perfil != "INVESTIDOR":
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso permitido apenas para investidores.",
+            )
+
+        return listar_aportes_investidor(
+            investidor_id=claims.sub,
+            pagina=pagina,
+            tamanho_pagina=tamanho_pagina,
+            campanha_id=campanha_id,
+            data_dir=data_dir,
+        )
+
+    # ---------------------------------------------------------
+    # GET /aportes/campanha/{campanha_id}/resumo
+    # ---------------------------------------------------------
+
+    @api.get("/aportes/campanha/{campanha_id}/resumo")
+    def resumo_campanha(
+        campanha_id: str,
+    ) -> ResumoCampanha:
+        """Retorna total e quantidade de aportes confirmados."""
+
+        if not campanha_id.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="O identificador da campanha é obrigatório.",
+            )
+
+        return obter_resumo_campanha(
+            campanha_id=campanha_id,
+            data_dir=data_dir,
+        )
 
     return api

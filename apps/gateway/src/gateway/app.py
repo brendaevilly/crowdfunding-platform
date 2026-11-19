@@ -172,11 +172,31 @@ def criar_app(
             raise AppError(413, "corpo_grande_demais", "Corpo da requisição acima de 1 MiB.")
 
         alvo = destino.caminho + (f"?{request.url.query}" if request.url.query else "")
+
+        # Prepara os cabeçalhos internos, removendo os enviados
+        # pelo cliente que não devem ser considerados confiáveis.
+        headers_internos = dict(headers_para_servico(request.headers, claims))
+
+        # O microsserviço de Aportes também valida o JWT
+        # para garantir que o investidor consulte apenas
+        # o próprio histórico.
+        #
+        # Encaminha Authorization somente para esta rota.
+        if (
+            request.method == "GET"
+            and destino.servico == "aportes"
+            and destino.caminho == "/aportes/meus"
+            and claims is not None
+        ):
+            token = _bearer(request)
+            if token is not None:
+                headers_internos["authorization"] = f"Bearer {token}"
+
         try:
             resposta = await cliente(destino.servico).request(
                 request.method,
                 alvo,
-                headers=headers_para_servico(request.headers, claims),
+                headers=headers_internos,
                 content=corpo,
             )
         except ERROS_DE_CONEXAO as exc:

@@ -126,7 +126,7 @@ def test_migrations_sao_idempotentes(banco: Path) -> None:
         quantidade = conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()
 
     assert quantidade is not None
-    assert quantidade[0] == 5
+    assert quantidade[0] == 6
 
 
 def test_aporte_confirmado_nao_pode_voltar_a_pendente(
