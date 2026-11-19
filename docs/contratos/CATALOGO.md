@@ -17,7 +17,7 @@ Envelope de todo evento (schemaVersion atual: **1**): `eventId`, `topic`, `schem
 | Campo | Tipo | Obrigatório |
 |---|---|---|
 | `usuarioId` | string | sim |
-| `perfil` | EMPREENDEDOR \| INVESTIDOR | sim |
+| `perfil` | EMPREENDEDOR \| INVESTIDOR \| ADMIN | sim |
 | `cadastradoEm` | data/hora UTC (ISO 8601) | sim |
 
 ### UsuarioStatusAlterado (`usuario.status-alterado`)
