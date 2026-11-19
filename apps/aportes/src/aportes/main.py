@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from aportes.acl_kyc import consumir_identidade_verificada
+from aportes.api import criar_router
 from aportes.repository import inicializar_banco
-from contracts.topicos import IDENTIDADE_VERIFICADA
+from aportes.status_investidor import consumir_usuario_status_alterado
+from contracts.topicos import IDENTIDADE_VERIFICADA, USUARIO_STATUS_ALTERADO
 from shared.config import service_url
 from shared.http.app import create_app
 from shared.http.runner import run
@@ -26,6 +28,8 @@ app = create_app(
     lifespan=lifespan,
 )
 
+app.include_router(criar_router())
+
 configure_messaging(
     app,
     service="aportes",
@@ -33,6 +37,7 @@ configure_messaging(
     broker_url=service_url("broker"),
     handlers={
         IDENTIDADE_VERIFICADA: consumir_identidade_verificada,
+        USUARIO_STATUS_ALTERADO: consumir_usuario_status_alterado,
     },
 )
 

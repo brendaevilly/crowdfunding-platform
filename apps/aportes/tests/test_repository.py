@@ -35,21 +35,30 @@ def test_migrations_criam_tabelas(banco: Path) -> None:
     assert {
         "aporte",
         "investidor_verificado",
+        "aporte_requisicao",
+        "investidor_status",
         "outbox_evento",
         "evento_processado",
     }.issubset(tabelas)
 
 
 @pytest.mark.parametrize("valor", [0, -1, -100])
-def test_banco_rejeita_aporte_invalido(banco: Path, valor: int) -> None:
+def test_banco_rejeita_aporte_invalido(
+    banco: Path,
+    valor: int,
+) -> None:
     with closing(open_db("aportes", banco)) as conn, pytest.raises(sqlite3.IntegrityError):
         conn.execute(
             """
-                INSERT INTO aporte (
-                    id, campanha_id, investidor_id, valor, status
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
+            INSERT INTO aporte (
+                id,
+                campanha_id,
+                investidor_id,
+                valor,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
             (
                 f"aporte-{valor}",
                 "campanha-1",
@@ -109,6 +118,7 @@ def test_nao_alterar_valor_confirmado(banco: Path) -> None:
 
 
 def test_migrations_sao_idempotentes(banco: Path) -> None:
+    """Verifica que executar migrations novamente não cria duplicações."""
     inicializar_banco(banco)
     inicializar_banco(banco)
 
@@ -116,10 +126,12 @@ def test_migrations_sao_idempotentes(banco: Path) -> None:
         quantidade = conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()
 
     assert quantidade is not None
-    assert quantidade[0] == 2
+    assert quantidade[0] == 5
 
 
-def test_aporte_confirmado_nao_pode_voltar_a_pendente(banco: Path) -> None:
+def test_aporte_confirmado_nao_pode_voltar_a_pendente(
+    banco: Path,
+) -> None:
     repo = AporteRepository(banco)
     confirmado = criar_aporte().confirmar()
     repo.salvar(confirmado)
@@ -132,7 +144,9 @@ def test_aporte_confirmado_nao_pode_voltar_a_pendente(banco: Path) -> None:
     assert repo.buscar_por_id(confirmado.id) == confirmado
 
 
-def test_aporte_rejeitado_nao_pode_ser_confirmado(banco: Path) -> None:
+def test_aporte_rejeitado_nao_pode_ser_confirmado(
+    banco: Path,
+) -> None:
     repo = AporteRepository(banco)
     rejeitado = criar_aporte().rejeitar()
     repo.salvar(rejeitado)
@@ -145,7 +159,9 @@ def test_aporte_rejeitado_nao_pode_ser_confirmado(banco: Path) -> None:
     assert repo.buscar_por_id(rejeitado.id) == rejeitado
 
 
-def test_nao_permite_alterar_identificadores(banco: Path) -> None:
+def test_nao_permite_alterar_identificadores(
+    banco: Path,
+) -> None:
     repo = AporteRepository(banco)
     original = criar_aporte()
     repo.salvar(original)
@@ -163,7 +179,9 @@ def test_nao_permite_alterar_identificadores(banco: Path) -> None:
     assert repo.buscar_por_id(original.id) == original
 
 
-def test_salvar_aporte_finalizado_sem_alteracoes(banco: Path) -> None:
+def test_salvar_aporte_finalizado_sem_alteracoes(
+    banco: Path,
+) -> None:
     repo = AporteRepository(banco)
     confirmado = criar_aporte().confirmar()
 
