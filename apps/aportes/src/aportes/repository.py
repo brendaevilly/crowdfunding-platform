@@ -117,3 +117,39 @@ class AporteRepository:
             )
 
         return transaction(operacao, SERVICE, self.data_dir)
+
+
+def salvar_aporte_na_transacao(
+    conn: sqlite3.Connection,
+    aporte: Aporte,
+) -> None:
+    """Insere um aporte confirmado ou rejeitado na transação existente.
+
+    Não executa commit. A transação externa controla a
+    confirmação ou o rollback da operação.
+    """
+    if aporte.status not in (
+        StatusAporte.CONFIRMADO,
+        StatusAporte.REJEITADO,
+    ):
+        raise ValueError("Esta operação exige um aporte confirmado ou rejeitado")
+
+    conn.execute(
+        """
+        INSERT INTO aporte (
+            id,
+            campanha_id,
+            investidor_id,
+            valor,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            aporte.id,
+            aporte.campanha_id,
+            aporte.investidor_id,
+            aporte.valor.centavos,
+            aporte.status.value,
+        ),
+    )
