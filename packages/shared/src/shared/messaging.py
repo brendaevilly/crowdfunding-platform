@@ -19,6 +19,8 @@ from shared.relay import run_relay
 
 logger = logging.getLogger(__name__)
 
+RETRY_SECONDS = 2.0
+
 
 def configure_messaging(
     app: FastAPI,
@@ -58,6 +60,29 @@ def configure_messaging(
             name=f"{service}-outbox-relay",
         )
 
+        async def registrar_assinaturas() -> None:
+            """Tenta registrar assinaturas até conseguir ou ser cancelado."""
+            while True:
+                try:
+                    await asyncio.to_thread(
+                        register_subscriptions,
+                        service=service,
+                        service_url=service_url,
+                        broker_url=broker_url,
+                        topics=list(handlers),
+                    )
+                except Exception:
+                    logger.warning(
+                        "Broker indisponível para %s; nova tentativa em %.1fs",
+                        service,
+                        RETRY_SECONDS,
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(RETRY_SECONDS)
+                else:
+                    logger.info("Assinaturas registradas: %s", service)
+                    return
+
         async with original_lifespan(application):
             await asyncio.to_thread(
                 install_messaging_schema,
@@ -65,12 +90,9 @@ def configure_messaging(
                 data_dir,
             )
 
-            await asyncio.to_thread(
-                register_subscriptions,
-                service=service,
-                service_url=service_url,
-                broker_url=broker_url,
-                topics=list(handlers),
+            subscription_task = asyncio.create_task(
+                registrar_assinaturas(),
+                name=f"{service}-subscriptions",
             )
 
             relay_thread.start()
@@ -79,6 +101,11 @@ def configure_messaging(
             try:
                 yield
             finally:
+                subscription_task.cancel()
+                await asyncio.gather(
+                    subscription_task,
+                    return_exceptions=True,
+                )
                 stop_event.set()
                 await asyncio.to_thread(
                     relay_thread.join,
