@@ -1,12 +1,14 @@
 """Inicialização do microsserviço de Aportes."""
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
 from aportes.acl_kyc import consumir_identidade_verificada
 from aportes.api import criar_router
+from aportes.reconciliacao_worker import executar_reconciliacao_periodica
 from aportes.repository import inicializar_banco
 from aportes.status_investidor import consumir_usuario_status_alterado
 from contracts.topicos import IDENTIDADE_VERIFICADA, USUARIO_STATUS_ALTERADO
@@ -18,9 +20,20 @@ from shared.messaging import configure_messaging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Prepara o banco de dados antes de receber requisições."""
+    """Prepara o banco e executa a reconciliação periódica."""
     inicializar_banco()
-    yield
+
+    tarefa = asyncio.create_task(
+        executar_reconciliacao_periodica(),
+        name="reconciliacao-aportes",
+    )
+
+    try:
+        yield
+    finally:
+        tarefa.cancel()
+        with suppress(asyncio.CancelledError):
+            await tarefa
 
 
 app = create_app(

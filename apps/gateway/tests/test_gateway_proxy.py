@@ -323,3 +323,36 @@ def test_health_agregado_com_servico_fora(client: TestClient, upstream: Upstream
     assert corpo["status"] == "degraded"
     assert corpo["dependencies"]["notificacao"]["status"] == "down"
     assert corpo["dependencies"]["campanhas"]["status"] == "up"
+
+
+def test_historico_aportes_usa_identidade_autenticada(
+    client: TestClient,
+    upstream: Upstream,
+) -> None:
+    """Encaminha o JWT ao histórico e ignora X-User-ID falsificado."""
+    autenticacao = _auth("investidor-a")
+    resposta = client.get(
+        "/api/aportes/meus",
+        headers={**autenticacao, "x-user-id": "investidor-b"},
+    )
+
+    assert resposta.status_code == 201
+    requisicao = _ultima(upstream)
+    assert requisicao.method == "GET"
+    assert requisicao.url.host == "aportes.test"
+    assert requisicao.url.path == "/aportes/meus"
+    assert requisicao.headers.get_list("x-user-id") == ["investidor-a"]
+    assert requisicao.headers["authorization"] == autenticacao["authorization"]
+
+
+def test_jwt_nao_e_encaminhado_em_outras_rotas_de_aportes(
+    client: TestClient,
+    upstream: Upstream,
+) -> None:
+    """O repasse do JWT é exclusivo da rota GET /aportes/meus."""
+    resposta = client.get("/api/aportes", headers=_auth("investidor-a"))
+
+    assert resposta.status_code == 201
+    requisicao = _ultima(upstream)
+    assert requisicao.url.path == "/aportes"
+    assert "authorization" not in requisicao.headers
