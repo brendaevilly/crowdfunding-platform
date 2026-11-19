@@ -57,8 +57,10 @@ def _ip(request: Request) -> str:
 
 
 def _bearer(request: Request) -> str | None:
+    """Extrai o token JWT do cabeçalho Authorization."""
     valor = request.headers.get("authorization", "")
     esquema, _, token = valor.partition(" ")
+
     return token.strip() if esquema.lower() == "bearer" and token.strip() else None
 
 
@@ -70,52 +72,103 @@ def criar_app(
     relogio: Callable[[], float] = time.monotonic,
     agora: Callable[[], float] = time.time,
 ) -> FastAPI:
-    """`servicos`: nome -> URL base (padrão: services.json); `transport`: transporte httpx."""
+    """Cria o Gateway com proxy, autenticação e rate limit."""
     cfg = settings or GatewaySettings.from_env()
+
     urls = (
         dict(servicos)
         if servicos is not None
         else {nome: info.url for nome, info in load_services().items()}
     )
-    limitador = LimitadorTaxa(cfg.rate_limit_requests, cfg.rate_limit_window, relogio)
+
+    limitador = LimitadorTaxa(
+        cfg.rate_limit_requests,
+        cfg.rate_limit_window,
+        relogio,
+    )
+
     clientes: dict[str, ServiceClient] = {}
 
     def cliente(nome: str) -> ServiceClient:
         if nome not in clientes:
             clientes[nome] = ServiceClient(
-                base_url=urls[nome], timeout=cfg.upstream_timeout, transport=transport
+                base_url=urls[nome],
+                timeout=cfg.upstream_timeout,
+                transport=transport,
             )
+
         return clientes[nome]
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if cfg.segredo_padrao:
             log.warning("JWT_SECRET ausente: usando o segredo padrão de desenvolvimento")
+
         yield
+
         await asyncio.gather(*(c.aclose() for c in clientes.values()))
 
-    app = create_app(NOME, version=VERSAO, include_health=False, lifespan=lifespan)
+    app = create_app(
+        NOME,
+        version=VERSAO,
+        include_health=False,
+        lifespan=lifespan,
+    )
 
-    # ------------------------------------------------------------------ /health agregado
+    # ------------------------------------------------------------------
+    # Health agregado
+    # ------------------------------------------------------------------
 
-    async def consultar(nome: str, url: str) -> tuple[str, DependenciaSaude]:
+    async def consultar(
+        nome: str,
+        url: str,
+    ) -> tuple[str, DependenciaSaude]:
         inicio = time.perf_counter()
-        sonda = ServiceClient(base_url=url, timeout=cfg.health_timeout, transport=transport)
+
+        sonda = ServiceClient(
+            base_url=url,
+            timeout=cfg.health_timeout,
+            transport=transport,
+        )
+
         try:
             async with sonda:
                 resposta = await sonda.get("/health")
-            ms = round((time.perf_counter() - inicio) * 1000, 1)
-            if resposta.status_code == 200:
-                return nome, DependenciaSaude(status="up", latencyMs=ms)
-            return nome, DependenciaSaude(status="down", erro=f"HTTP {resposta.status_code}")
-        except Exception as exc:  # qualquer falha = serviço fora; nunca derruba o /health
-            return nome, DependenciaSaude(status="down", erro=type(exc).__name__)
 
-    @app.get("/health", response_model=GatewayHealth, tags=["infra"])
+            ms = round(
+                (time.perf_counter() - inicio) * 1000,
+                1,
+            )
+
+            if resposta.status_code == 200:
+                return nome, DependenciaSaude(
+                    status="up",
+                    latencyMs=ms,
+                )
+
+            return nome, DependenciaSaude(
+                status="down",
+                erro=f"HTTP {resposta.status_code}",
+            )
+
+        except Exception as exc:
+            return nome, DependenciaSaude(
+                status="down",
+                erro=type(exc).__name__,
+            )
+
+    @app.get(
+        "/health",
+        response_model=GatewayHealth,
+        tags=["infra"],
+    )
     async def health() -> GatewayHealth:
-        alvos = [(n, u) for n, u in urls.items() if n != NOME]
-        deps = dict(await asyncio.gather(*(consultar(n, u) for n, u in alvos)))
-        todos_ok = all(d.status == "up" for d in deps.values())
+        alvos = [(nome, url) for nome, url in urls.items() if nome != NOME]
+
+        deps = dict(await asyncio.gather(*(consultar(nome, url) for nome, url in alvos)))
+
+        todos_ok = all(dependencia.status == "up" for dependencia in deps.values())
+
         return GatewayHealth(
             status="ok" if todos_ok else "degraded",
             service=NOME,
@@ -123,74 +176,175 @@ def criar_app(
             dependencies=deps,
         )
 
-    # ------------------------------------------------------------------ proxy
+    # ------------------------------------------------------------------
+    # Autenticação JWT
+    # ------------------------------------------------------------------
 
-    def autenticar(request: Request) -> tuple[Claims | None, str]:
-        """(claims, motivo). `motivo` explica a ausência de claims: ausente|invalido|expirado."""
+    def autenticar(
+        request: Request,
+    ) -> tuple[Claims | None, str]:
+        """Valida o JWT e retorna suas claims."""
         token = _bearer(request)
+
         if token is None:
             return None, "ausente"
+
         try:
-            claims = validar_token(token, segredo=cfg.jwt_secret, agora=agora())
-            Perfil(claims.perfil)  # só perfis conhecidos do contrato
+            claims = validar_token(
+                token,
+                segredo=cfg.jwt_secret,
+                agora=agora(),
+            )
+
+            # Rejeita perfis desconhecidos.
+            Perfil(claims.perfil)
+
         except TokenInvalido as exc:
-            return None, "expirado" if exc.codigo == "expirado" else "invalido"
+            motivo = "expirado" if exc.codigo == "expirado" else "invalido"
+            return None, motivo
+
         except ValueError:
             return None, "invalido"
+
         return claims, ""
 
-    async def proxy(request: Request, prefixo: str, caminho: str = "") -> Response:
-        del prefixo, caminho  # a rota usa o caminho completo de request.url.path
+    # ------------------------------------------------------------------
+    # Proxy HTTP
+    # ------------------------------------------------------------------
+
+    async def proxy(
+        request: Request,
+        prefixo: str,
+        caminho: str = "",
+    ) -> Response:
+        del prefixo, caminho
+
         path = request.url.path
+
         try:
             destino = resolver(path)
+
         except CaminhoInvalido as exc:
-            raise AppError(400, "caminho_invalido", "Caminho inválido.") from exc
+            raise AppError(
+                400,
+                "caminho_invalido",
+                "Caminho inválido.",
+            ) from exc
+
         if destino is None or destino.servico not in urls:
-            raise AppError(404, "rota_desconhecida", f"Nenhuma rota para {path}.")
+            raise AppError(
+                404,
+                "rota_desconhecida",
+                f"Nenhuma rota para {path}.",
+            )
 
         claims, motivo = autenticar(request)
+
+        # Rate limit por usuário autenticado ou endereço IP.
         chave = f"user:{claims.sub}" if claims else f"ip:{_ip(request)}"
+
         decisao = limitador.permitir(chave)
+
         if not decisao.permitido:
             raise AppError(
                 429,
                 "limite_excedido",
                 "Muitas requisições. Tente novamente em instantes.",
-                headers={"retry-after": str(decisao.retry_after)},
+                headers={
+                    "retry-after": str(decisao.retry_after),
+                },
             )
 
-        if claims is None and not rota_publica(request.method, path):
-            codigo, msg = {
-                "ausente": ("nao_autenticado", "Token ausente. Envie Authorization: Bearer <jwt>."),
-                "expirado": ("token_expirado", "Token expirado."),
-            }.get(motivo, ("token_invalido", "Token inválido."))
-            raise AppError(401, codigo, msg, headers={"www-authenticate": "Bearer"})
+        # Rotas privadas exigem JWT válido.
+        if claims is None and not rota_publica(
+            request.method,
+            path,
+        ):
+            codigo, mensagem = {
+                "ausente": (
+                    "nao_autenticado",
+                    "Token ausente. Envie Authorization: Bearer <jwt>.",
+                ),
+                "expirado": (
+                    "token_expirado",
+                    "Token expirado.",
+                ),
+            }.get(
+                motivo,
+                (
+                    "token_invalido",
+                    "Token inválido.",
+                ),
+            )
+
+            raise AppError(
+                401,
+                codigo,
+                mensagem,
+                headers={
+                    "www-authenticate": "Bearer",
+                },
+            )
 
         corpo = await request.body()
+
         if len(corpo) > TAMANHO_MAXIMO_CORPO:
-            raise AppError(413, "corpo_grande_demais", "Corpo da requisição acima de 1 MiB.")
+            raise AppError(
+                413,
+                "corpo_grande_demais",
+                "Corpo da requisição acima de 1 MiB.",
+            )
 
-        alvo = destino.caminho + (f"?{request.url.query}" if request.url.query else "")
+        alvo = destino.caminho
 
-        # Prepara os cabeçalhos internos, removendo os enviados
-        # pelo cliente que não devem ser considerados confiáveis.
-        headers_internos = dict(headers_para_servico(request.headers, claims))
+        if request.url.query:
+            alvo += f"?{request.url.query}"
 
-        # O microsserviço de Aportes também valida o JWT
-        # para garantir que o investidor consulte apenas
-        # o próprio histórico.
-        #
-        # Encaminha Authorization somente para esta rota.
-        if (
+        # Remove cabeçalhos de identidade enviados pelo cliente
+        # e prepara os cabeçalhos internos confiáveis.
+        headers_internos = dict(
+            headers_para_servico(
+                request.headers,
+                claims,
+            )
+        )
+
+        # --------------------------------------------------------------
+        # Encaminhamento do JWT para rotas protegidas
+        # --------------------------------------------------------------
+
+        # Aportes valida novamente o JWT para consultar
+        # o histórico do próprio investidor.
+        rota_aportes_meus = (
             request.method == "GET"
             and destino.servico == "aportes"
             and destino.caminho == "/aportes/meus"
-            and claims is not None
-        ):
+        )
+
+        # A Identidade valida novamente o JWT para:
+        # - consultar o próprio perfil;
+        # - bloquear usuários (somente ADMIN);
+        # - desbloquear usuários (somente ADMIN).
+        rota_identidade_protegida = destino.servico == "identidade" and (
+            (request.method == "GET" and destino.caminho == "/identidade/usuarios/me")
+            or (
+                request.method == "POST"
+                and destino.caminho.startswith("/identidade/usuarios/")
+                and destino.caminho.endswith(("/bloquear", "/desbloquear"))
+            )
+        )
+
+        # Encaminha Authorization somente quando necessário.
+        # As claims já foram validadas pelo Gateway.
+        if claims is not None and (rota_aportes_meus or rota_identidade_protegida):
             token = _bearer(request)
+
             if token is not None:
                 headers_internos["authorization"] = f"Bearer {token}"
+
+        # --------------------------------------------------------------
+        # Encaminhamento da requisição ao microsserviço
+        # --------------------------------------------------------------
 
         try:
             resposta = await cliente(destino.servico).request(
@@ -199,24 +353,40 @@ def criar_app(
                 headers=headers_internos,
                 content=corpo,
             )
+
         except ERROS_DE_CONEXAO as exc:
             log.warning(
                 "serviço indisponível",
-                extra={"servico": destino.servico, "erro": type(exc).__name__},
+                extra={
+                    "servico": destino.servico,
+                    "erro": type(exc).__name__,
+                },
             )
+
             raise AppError(
                 503,
                 "servico_indisponivel",
-                f"O serviço '{destino.servico}' está indisponível no momento.",
-                {"servico": destino.servico},
+                (f"O serviço '{destino.servico}' está indisponível no momento."),
+                {
+                    "servico": destino.servico,
+                },
             ) from exc
+
         except ERROS_DE_TIMEOUT as exc:
-            log.warning("serviço lento", extra={"servico": destino.servico})
+            log.warning(
+                "serviço lento",
+                extra={
+                    "servico": destino.servico,
+                },
+            )
+
             raise AppError(
                 504,
                 "servico_timeout",
-                f"O serviço '{destino.servico}' não respondeu a tempo.",
-                {"servico": destino.servico},
+                (f"O serviço '{destino.servico}' não respondeu a tempo."),
+                {
+                    "servico": destino.servico,
+                },
             ) from exc
 
         return Response(
@@ -225,8 +395,22 @@ def criar_app(
             headers=headers_para_cliente(resposta.headers),
         )
 
-    app.add_api_route("/api/{prefixo}", proxy, methods=METODOS, include_in_schema=False)
+    # ------------------------------------------------------------------
+    # Registro das rotas do Gateway
+    # ------------------------------------------------------------------
+
     app.add_api_route(
-        "/api/{prefixo}/{caminho:path}", proxy, methods=METODOS, include_in_schema=False
+        "/api/{prefixo}",
+        proxy,
+        methods=METODOS,
+        include_in_schema=False,
     )
+
+    app.add_api_route(
+        "/api/{prefixo}/{caminho:path}",
+        proxy,
+        methods=METODOS,
+        include_in_schema=False,
+    )
+
     return app

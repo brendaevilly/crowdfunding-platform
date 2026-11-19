@@ -123,7 +123,7 @@ def test_token_expirado(client: TestClient) -> None:
 
 
 def test_perfil_desconhecido_e_recusado(client: TestClient) -> None:
-    r = client.get("/api/aportes", headers=_auth(perfil="ADMIN"))
+    r = client.get("/api/aportes", headers=_auth(perfil="PERFIL_INVALIDO"))
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "token_invalido"
 
@@ -356,3 +356,34 @@ def test_jwt_nao_e_encaminhado_em_outras_rotas_de_aportes(
     requisicao = _ultima(upstream)
     assert requisicao.url.path == "/aportes"
     assert "authorization" not in requisicao.headers
+
+
+@pytest.mark.parametrize(
+    ("metodo", "caminho"),
+    [
+        ("GET", "/api/identidade/usuarios/me"),
+        ("POST", "/api/identidade/usuarios/u2/bloquear"),
+        ("POST", "/api/identidade/usuarios/u2/desbloquear"),
+    ],
+)
+def test_jwt_encaminhado_para_rotas_protegidas_da_identidade(
+    client: TestClient, upstream: Upstream, metodo: str, caminho: str
+) -> None:
+    autenticacao = _auth("admin-1", "ADMIN")
+    resposta = client.request(metodo, caminho, headers=autenticacao)
+
+    assert resposta.status_code == 201
+    requisicao = _ultima(upstream)
+    assert requisicao.url.host == "identidade.test"
+    assert requisicao.headers["authorization"] == autenticacao["authorization"]
+    assert requisicao.headers["x-user-id"] == "admin-1"
+    assert requisicao.headers["x-user-perfil"] == "ADMIN"
+
+
+def test_jwt_nao_encaminhado_para_outra_rota_da_identidade(
+    client: TestClient, upstream: Upstream
+) -> None:
+    resposta = client.get("/api/identidade/usuarios/u2", headers=_auth())
+
+    assert resposta.status_code == 201
+    assert "authorization" not in _ultima(upstream).headers

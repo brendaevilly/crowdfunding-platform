@@ -12,6 +12,7 @@ from contracts.base import Centavos, CentavosPositivos, Contrato, Id
 class Perfil(StrEnum):
     EMPREENDEDOR = "EMPREENDEDOR"
     INVESTIDOR = "INVESTIDOR"
+    ADMIN = "ADMIN"
 
 
 class StatusUsuario(StrEnum):
