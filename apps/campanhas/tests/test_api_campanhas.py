@@ -1,5 +1,6 @@
 """Testes dos endpoints HTTP do microsserviço Campanhas."""
 
+from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,7 +19,7 @@ from shared.db import open_db
 
 
 @pytest.fixture
-def client_e_dados(tmp_path: Path) -> tuple[TestClient, Path]:
+def client_e_dados(tmp_path: Path) -> Iterator[tuple[TestClient, Path]]:
     inicializar_banco(tmp_path)
     with closing(open_db("campanhas", tmp_path)) as conn:
         # Cadastra empreendedor ativo
@@ -62,7 +63,8 @@ def client_e_dados(tmp_path: Path) -> tuple[TestClient, Path]:
         conn.commit()
 
     app = criar_campanhas_app(tmp_path)
-    return TestClient(app), tmp_path
+    with TestClient(app) as client:
+        yield client, tmp_path
 
 
 def test_criar_campanha_com_sucesso(client_e_dados: tuple[TestClient, Path]) -> None:

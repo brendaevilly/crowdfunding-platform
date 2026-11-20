@@ -67,6 +67,20 @@ class Campanha:
     criado_em: datetime = field(default_factory=lambda: datetime.now(UTC))
     atualizado_em: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    @property
+    def meta_atingida(self) -> bool:
+        """Indica se o valor arrecadado atingiu ou superou a meta."""
+        return self.valor_arrecadado >= self.meta.centavos
+
+    def esta_dentro_do_prazo(self, agora: datetime | None = None) -> bool:
+        """Verifica se a campanha ainda está dentro do período de vigência."""
+        agora_ref = agora or datetime.now(UTC)
+        return agora_ref <= self.prazo.fim
+
+    def aceita_aportes(self, agora: datetime | None = None) -> bool:
+        """Regra 2: aceita aportes apenas se estiver PUBLICADA e dentro do prazo."""
+        return self.status == StatusCampanha.PUBLICADA and self.esta_dentro_do_prazo(agora)
+
     @classmethod
     def criar(
         cls,

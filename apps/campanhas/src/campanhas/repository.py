@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -15,7 +17,7 @@ from campanhas.domain import (
     StatusCampanha,
     TransicaoInvalidaError,
 )
-from shared.db import migrate
+from shared.db import migrate, open_db
 from shared.messaging_schema import install_messaging_schema
 
 SERVICE = "campanhas"
@@ -26,6 +28,20 @@ def inicializar_banco(data_dir: str | Path = "data") -> None:
     """Aplica migrations do serviço e instala tabelas de outbox e idempotência."""
     migrate(SERVICE, MIGRATIONS_DIR, data_dir)
     install_messaging_schema(SERVICE, data_dir)
+
+
+def obter_conexao_leitura(data_dir: str | Path = "data") -> sqlite3.Connection:
+    """Abre uma conexão de leitura dedicada que simula uma réplica (CQRS leve)."""
+    return open_db(SERVICE, data_dir)
+
+
+def executar_leitura[T](
+    fn: Callable[[sqlite3.Connection], T],
+    data_dir: str | Path = "data",
+) -> T:
+    """Executa consulta de leitura na conexão que simula a réplica."""
+    with closing(obter_conexao_leitura(data_dir)) as conn:
+        return fn(conn)
 
 
 def _row_to_campanha(row: sqlite3.Row | tuple[Any, ...]) -> Campanha:
@@ -207,30 +223,23 @@ def atualizar_campanha(
 def listar_campanhas(
     conn: sqlite3.Connection,
     status: StatusCampanha | None = None,
+    limite: int = 20,
+    offset: int = 0,
 ) -> list[Campanha]:
-    """Lista campanhas cadastradas, opcionalmente filtrando por status."""
+    """Lista campanhas cadastradas com paginação, opcionalmente filtrando por status."""
+    query = """
+        SELECT
+            id, empreendedor_id, titulo, descricao, meta,
+            prazo_inicio, prazo_fim, status, valor_arrecadado,
+            motivo_reprovacao, versao, criado_em, atualizado_em
+        FROM campanhas
+    """
+    params: list[Any] = []
     if status is not None:
-        cursor = conn.execute(
-            """
-            SELECT
-                id, empreendedor_id, titulo, descricao, meta,
-                prazo_inicio, prazo_fim, status, valor_arrecadado,
-                motivo_reprovacao, versao, criado_em, atualizado_em
-            FROM campanhas
-            WHERE status = ?
-            ORDER BY criado_em DESC
-            """,
-            (status.value,),
-        )
-    else:
-        cursor = conn.execute(
-            """
-            SELECT
-                id, empreendedor_id, titulo, descricao, meta,
-                prazo_inicio, prazo_fim, status, valor_arrecadado,
-                motivo_reprovacao, versao, criado_em, atualizado_em
-            FROM campanhas
-            ORDER BY criado_em DESC
-            """
-        )
+        query += " WHERE status = ?"
+        params.append(status.value)
+    query += " ORDER BY criado_em DESC LIMIT ? OFFSET ?"
+    params.extend([limite, offset])
+
+    cursor = conn.execute(query, tuple(params))
     return [_row_to_campanha(row) for row in cursor.fetchall()]

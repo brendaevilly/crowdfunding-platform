@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +24,7 @@ from campanhas.repository import (
 )
 from campanhas.repository import (
     atualizar_campanha_rascunho,
+    executar_leitura,
     listar_campanhas,
     obter_campanha_por_id,
     salvar_nova_campanha,
@@ -84,6 +85,8 @@ def _campanha_to_dict(c: Campanha) -> dict[str, object]:
         "prazoFim": c.prazo.fim.isoformat(),
         "status": c.status.value,
         "valorArrecadado": c.valor_arrecadado,
+        "metaAtingida": c.meta_atingida,
+        "meta_atingida": c.meta_atingida,
         "motivoReprovacao": c.motivo_reprovacao,
         "versao": c.versao,
         "criadoEm": c.criado_em.isoformat(),
@@ -163,21 +166,38 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
     @router.get("/campanhas")
     async def listar_campanhas_endpoint(
         status_filtro: str | None = Query(default=None, alias="status"),
+        limite: int = Query(default=20, ge=1, le=100, alias="limite"),
+        offset: int = Query(default=0, ge=0, alias="offset"),
+        limit: int | None = Query(default=None, alias="limit"),
+        ativas: bool | None = Query(default=None, alias="ativas"),
     ) -> JSONResponse:
         status_enum: DomainStatus | None = None
+        tamanho_limite = limit if limit is not None else limite
+
         if status_filtro:
-            try:
-                status_enum = DomainStatus(status_filtro)
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Status '{status_filtro}' inválido.",
-                ) from exc
+            if status_filtro.upper() in ("ATIVA", "ATIVAS", "PUBLICADA", "PUBLICADAS"):
+                status_enum = DomainStatus.PUBLICADA
+            else:
+                try:
+                    status_enum = DomainStatus(status_filtro)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Status '{status_filtro}' inválido.",
+                    ) from exc
+        elif ativas is True:
+            status_enum = DomainStatus.PUBLICADA
 
         def operacao(conn: sqlite3.Connection) -> list[Campanha]:
-            return listar_campanhas(conn, status_enum)
+            return listar_campanhas(
+                conn,
+                status=status_enum,
+                limite=tamanho_limite,
+                offset=offset,
+            )
 
-        campanhas = transaction(operacao, "campanhas", data_dir)
+        # Listagem pública utiliza conexão de leitura separada (simulando réplica)
+        campanhas = executar_leitura(operacao, data_dir)
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content=[_campanha_to_dict(c) for c in campanhas],
@@ -390,9 +410,16 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
 
     @router.get("/campanhas/{campanha_id}/status")
     async def obter_status_campanha(campanha_id: str) -> CampanhaStatusResponse:
+        """Endpoint síncrono para verificação de status (usado pelo microsserviço Aportes).
+
+        A decisão de aceitar aporte é sempre feita na conexão de escrita (primária).
+        Regra 2: ativa só se status=ATIVA (PUBLICADA) e dentro do prazo.
+        """
+
         def operacao(conn: sqlite3.Connection) -> Campanha | None:
             return obter_campanha_por_id(conn, campanha_id)
 
+        # Decisão de aceitar aporte sempre na conexão de escrita (primária)
         campanha = transaction(operacao, "campanhas", data_dir)
         if campanha is None:
             raise HTTPException(
@@ -400,10 +427,16 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
                 detail=f"Campanha '{campanha_id}' não encontrada.",
             )
 
+        agora = datetime.now(UTC)
         status_contrato: ContractStatus
+
         if campanha.status == DomainStatus.PUBLICADA:
-            status_contrato = ContractStatus.PUBLICADA
-        elif campanha.status == DomainStatus.ENCERRADA:
+            # Regra 2: se estiver fora do prazo, responde ENCERRADA mesmo se o status for PUBLICADA
+            if agora > campanha.prazo.fim:
+                status_contrato = ContractStatus.ENCERRADA
+            else:
+                status_contrato = ContractStatus.PUBLICADA
+        elif campanha.status in (DomainStatus.ENCERRADA,):
             status_contrato = ContractStatus.ENCERRADA
         elif campanha.status == DomainStatus.CANCELADA:
             status_contrato = ContractStatus.CANCELADA
