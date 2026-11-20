@@ -73,13 +73,26 @@ Prefixos suportados diretamente no serviço ou roteados pelo Gateway (`/api/camp
 | Método | Caminho | Descrição | Permissão | Status Sucesso |
 |---|---|---|---|---|
 | `POST` | `/campanhas` | Cria uma nova campanha no status `RASCUNHO` | `EMPREENDEDOR` ativo | `201 Created` |
-| `GET` | `/campanhas` | Lista campanhas cadastradas (filtro `?status=EM_MODERACAO`) | Autenticado | `200 OK` |
+| `GET` | `/campanhas` | Listagem pública/ativas com paginação (`limite`, `offset`) via réplica de leitura | Autenticado | `200 OK` |
 | `GET` | `/campanhas/{id}` | Consulta detalhes completos da campanha | Autenticado | `200 OK` |
 | `PUT` | `/campanhas/{id}` | Atualiza dados (meta, prazo, título, descrição) de um rascunho | Empreendedor dono | `200 OK` |
 | `POST` | `/campanhas/{id}/submeter` | Envia a campanha para a fila de moderação | Empreendedor dono | `200 OK` |
 | `POST` | `/campanhas/{id}/aprovar` | Aprova campanha e publica `CampanhaPublicada` | `ADMIN` | `200 OK` |
 | `POST` | `/campanhas/{id}/reprovar` | Reprova campanha registrando motivo (Regra 9) | `ADMIN` | `200 OK` |
-| `GET` | `/campanhas/{id}/status` | Endpoint síncrono consumido pelo microsserviço Aportes | Serviços internos | `200 OK` |
+| `GET` | `/campanhas/{id}/status` | Consulta síncrona de status (conexão primária/escrita, Regra 2) | Serviços internos | `200 OK` |
+
+### Consulta Síncrona de Status (Regra 2) e CQRS Leve
+
+- **Decisão de Aportes na Conexão Primária:**
+  - O endpoint `GET /campanhas/{id}/status` consulta sempre a conexão de escrita primária, eliminando risco de leitura defasada por replicação.
+  - **Regra 2:** responde `PUBLICADA` apenas se o status for `PUBLICADA` e a data/hora atual estiver estritamente dentro do prazo (`agora <= prazoFim`). Se o prazo tiver expirado, responde `ENCERRADA` mesmo que o status no banco ainda não tenha sido alterado.
+- **Listagem Pública com Paginação e Simulação de Réplica:**
+  - `GET /campanhas` utiliza conexão de leitura dedicada (`executar_leitura`), simulando a réplica de leitura para suportar alto volume.
+  - Suporta paginação via query parameters `limite` (padrão 20, máx 100) e `offset` (padrão 0), além de filtros por `status` (ex.: `status=ATIVA` ou `status=EM_MODERACAO`).
+- **Coluna Gerada `meta_atingida`:**
+  - Adicionada via migration `002_adicionar_meta_atingida.sql`: `INTEGER GENERATED ALWAYS AS (valor_arrecadado >= meta) VIRTUAL`.
+  - É calculada nativamente pelo SQLite e **não é gravável** (tentativas de inserção explícita disparam erro no SQLite).
+  - Incluída em todas as respostas de campanha (`metaAtingida` / `meta_atingida`).
 
 ### Tratamento de Erros
 
