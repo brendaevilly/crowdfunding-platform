@@ -170,3 +170,20 @@ def atualizar_verificacao(
     )
 
     return cursor.rowcount == 1
+
+
+def listar_verificacoes_pendentes(
+    conn: sqlite3.Connection,
+) -> list[VerificacaoIdentidade]:
+    """Lista todas as verificações pendentes, da mais antiga à mais recente."""
+    linhas = conn.execute(
+        """
+        SELECT id, usuario_id, status, documento_tipo, documento_hash,
+               criado_em, atualizado_em
+        FROM kyc_verificacoes
+        WHERE status = 'PENDENTE'
+        ORDER BY criado_em ASC, id ASC
+        """
+    ).fetchall()
+
+    return [_linha_para_verificacao(linha) for linha in linhas]

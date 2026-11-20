@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -19,6 +20,7 @@ from identidade.kyc.servico import (
     NovaVerificacaoNaoPermitidaErro,
     VerificacaoKycNaoEncontradaErro,
     consultar_status_kyc,
+    listar_verificacoes_pendentes_admin,
     registrar_documento_kyc,
     solicitar_nova_verificacao,
     verificar_documento_com_provider,
@@ -44,6 +46,16 @@ class StatusKycResponse(BaseModel):
     verificacaoId: str
     status: str
     documentoTipo: str | None = None
+
+
+class VerificacaoPendenteAdminResponse(BaseModel):
+    """Dados não sensíveis para a fila administrativa de KYC."""
+
+    verificacaoId: str
+    usuarioId: str
+    status: str
+    documentoTipo: str | None = None
+    criadoEm: datetime | None = None
 
 
 def _para_response(
@@ -168,5 +180,29 @@ def criar_kyc_router(data_dir: str | Path = "data") -> APIRouter:
             ) from exc
 
         return _para_response(verificacao)
+
+    @router.get(
+        "/admin/verificacoes/pendentes",
+        response_model=list[VerificacaoPendenteAdminResponse],
+    )
+    def get_verificacoes_pendentes_admin(
+        request: Request,
+    ) -> list[VerificacaoPendenteAdminResponse]:
+        """Lista verificações pendentes exclusivamente para ADMIN."""
+
+        _exigir_administrador(request, data_dir)
+
+        verificacoes = listar_verificacoes_pendentes_admin(data_dir)
+
+        return [
+            VerificacaoPendenteAdminResponse(
+                verificacaoId=verificacao.id,
+                usuarioId=verificacao.usuario_id,
+                status=verificacao.status.value,
+                documentoTipo=verificacao.documento_tipo,
+                criadoEm=verificacao.criado_em,
+            )
+            for verificacao in verificacoes
+        ]
 
     return router
