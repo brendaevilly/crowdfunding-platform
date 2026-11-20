@@ -365,10 +365,12 @@ def criar_app(
             and destino.caminho == "/aportes/meus"
         )
 
-        # A Identidade valida novamente o JWT para:
-        # - consultar o próprio perfil;
-        # - bloquear usuários (somente ADMIN);
-        # - desbloquear usuários (somente ADMIN).
+        rota_retornos_meus = (
+            request.method == "GET"
+            and destino.servico == "custodia_retornos"
+            and destino.caminho == "/retornos/minhas-participacoes"
+        )
+
         rota_identidade_protegida = destino.servico == "identidade" and (
             (request.method == "GET" and destino.caminho == "/identidade/usuarios/me")
             or destino.caminho.startswith("/identidade/kyc/")
@@ -381,7 +383,9 @@ def criar_app(
 
         # Encaminha Authorization somente quando necessário.
         # As claims já foram validadas pelo Gateway.
-        if claims is not None and (rota_aportes_meus or rota_identidade_protegida):
+        if claims is not None and (
+            rota_aportes_meus or rota_retornos_meus or rota_identidade_protegida
+        ):
             token = _bearer(request)
 
             if token is not None:

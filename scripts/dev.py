@@ -193,6 +193,7 @@ class Launcher:
             )
         env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
         env.setdefault("IDENTIDADE_AUTO_ATIVAR", "true")
+        env.setdefault("KYC_HASH_SECRET", "segredo-kyc-hash-padrao-desenvolvimento-32b")
         env["PYTHONPATH"] = os.pathsep.join(
             [str(RAIZ / "apps" / nome / "src"), *filter(None, [env.get("PYTHONPATH")])]
         )

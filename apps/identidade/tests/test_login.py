@@ -157,4 +157,3 @@ def test_login_usuario_pendente_ativa_automaticamente(
         )
         assert me.status_code == 200
         assert me.json()["status"] == "ATIVO"
-

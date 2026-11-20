@@ -48,6 +48,7 @@ def criar_notificacao_app(data_dir: str | Path = "data") -> FastAPI:
     rotas = criar_notificacao_router(data_dir)
     app.include_router(rotas)
     app.include_router(rotas, prefix="/notificacao")
+    app.include_router(rotas, prefix="/notificacoes")
 
     habilitar_ttl = os.getenv("NOTIFICACAO_TTL_ENABLED", "true").lower() in (
         "true",

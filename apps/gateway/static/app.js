@@ -827,8 +827,8 @@ async function carregarAportesDashboard() {
   if (!container) return;
 
   try {
-    const res = await apiFetch("/api/aportes/meus-aportes");
-    const lista = Array.isArray(res) ? res : res?.items || res?.aportes || [];
+    const res = await apiFetch("/api/aportes/meus");
+    const lista = res?.itens || res?.items || (Array.isArray(res) ? res : []);
 
     if (lista.length === 0) {
       container.innerHTML = `<p class="text-muted" style="padding: 16px 0;">Você ainda não realizou nenhum aporte. <a href="/" style="font-weight: 700; text-decoration: underline;">Explorar campanhas</a>.</p>`;
@@ -851,9 +851,9 @@ async function carregarAportesDashboard() {
               (item) => `
             <tr>
               <td><strong>${item.campanha_titulo || item.campanhaId || "Campanha"}</strong></td>
-              <td>${formatarCentavos(item.valor_centavos || item.valorCentavos)}</td>
+              <td>${formatarCentavos(item.valor || item.valor_centavos || item.valorCentavos || 0)}</td>
               <td><span class="badge-status ${item.status === "CONFIRMADO" ? "success" : "warning"}">${item.status}</span></td>
-              <td style="color: var(--text-muted); font-size: 0.95rem;">${item.created_at ? new Date(item.created_at).toLocaleDateString("pt-BR") : "Recente"}</td>
+              <td style="color: var(--text-muted); font-size: 0.95rem;">${item.criadoEm || item.created_at ? new Date(item.criadoEm || item.created_at).toLocaleDateString("pt-BR") : "Recente"}</td>
             </tr>
           `
             )
@@ -871,7 +871,7 @@ async function carregarRetornosDashboard() {
   if (!container) return;
 
   try {
-    const res = await apiFetch("/api/retornos/participacoes");
+    const res = await apiFetch("/api/retornos/minhas-participacoes");
     const lista = Array.isArray(res) ? res : res?.participacoes || [];
 
     if (lista.length === 0) {
@@ -884,9 +884,9 @@ async function carregarRetornosDashboard() {
         <thead>
           <tr>
             <th>Campanha</th>
-            <th>Cotas</th>
+            <th>Valor Aportado</th>
             <th>Percentual</th>
-            <th>Retorno Acumulado</th>
+            <th>Data</th>
           </tr>
         </thead>
         <tbody>
@@ -894,10 +894,10 @@ async function carregarRetornosDashboard() {
             .map(
               (item) => `
             <tr>
-              <td><strong>${item.campanha_id || "Campanha"}</strong></td>
-              <td>${item.quantidade_cotas || 1} cota(s)</td>
-              <td>${item.percentual ? (item.percentual * 100).toFixed(2) + "%" : "1.50%"}</td>
-              <td style="color: var(--accent-green); font-weight: 700;">${formatarCentavos(item.retorno_acumulado_centavos || 0)}</td>
+              <td><strong>${item.campanhaId || item.campanha_id || "Campanha"}</strong></td>
+              <td>${formatarCentavos(item.valorAportado || item.valor_aportado || 0)}</td>
+              <td>${item.percentual ? (Number(item.percentual) * 100).toFixed(2) + "%" : "1.50%"}</td>
+              <td style="color: var(--text-muted); font-size: 0.95rem;">${item.criadaEm ? new Date(item.criadaEm).toLocaleDateString("pt-BR") : "Recente"}</td>
             </tr>
           `
             )
@@ -928,13 +928,13 @@ async function carregarNotificacoesDashboard() {
         (notif) => `
         <div class="notification-item ${notif.lida ? "" : "unread"}">
           <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 4px;">
-            ${notif.titulo || notif.tipo_evento || "Atualização da Plataforma"}
+            ${notif.titulo || notif.tipo_evento || notif.tipoEvento || "Atualização da Plataforma"}
           </div>
           <div style="color: var(--text-secondary); font-size: 0.95rem;">
             ${notif.mensagem || notif.corpo || "Um novo evento relacionado aos seus investimentos foi processado."}
           </div>
           <div class="notification-meta">
-            ${notif.created_at ? new Date(notif.created_at).toLocaleString("pt-BR") : "Agora mesmo"}
+            ${notif.criadoEm || notif.created_at ? new Date(notif.criadoEm || notif.created_at).toLocaleString("pt-BR") : "Agora mesmo"}
           </div>
         </div>
       `
