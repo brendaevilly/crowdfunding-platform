@@ -117,7 +117,7 @@ def cor_habilitada() -> bool:
     return sys.stdout.isatty() and "NO_COLOR" not in os.environ
 
 
-def health_ok(url: str, timeout: float = 1.0) -> bool:
+def health_ok(url: str, timeout: float = 2.0) -> bool:
     try:
         with urllib.request.urlopen(f"{url}/health", timeout=timeout) as r:  # noqa: S310
             return bool(r.status == 200)
