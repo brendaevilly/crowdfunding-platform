@@ -1,12 +1,13 @@
-"""Rotas HTTP da API de Campanhas."""
+"""Rotas HTTP da API de Gestão de Campanhas."""
 
 from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,14 +20,21 @@ from campanhas.domain import (
     StatusCampanha as DomainStatus,
 )
 from campanhas.repository import (
+    atualizar_campanha as repo_atualizar_campanha,
+)
+from campanhas.repository import (
     atualizar_campanha_rascunho,
+    listar_campanhas,
     obter_campanha_por_id,
     salvar_nova_campanha,
 )
 from campanhas.usuarios_cache import verificar_apto_a_criar_campanha
 from contracts.campanhas_api import CampanhaStatusResponse
 from contracts.campanhas_api import StatusCampanha as ContractStatus
+from contracts.eventos import CampanhaPublicada
+from contracts.topicos import CAMPANHA_PUBLICADA
 from shared.db import transaction
+from shared.outbox import OutboxEvent, add
 
 
 class CriarCampanhaRequest(BaseModel):
@@ -57,6 +65,14 @@ class AtualizarCampanhaRequest(BaseModel):
     )
 
 
+class ReprovarCampanhaRequest(BaseModel):
+    """Payload para reprovação de campanha."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    motivo: str = Field(min_length=1, description="Motivo detalhado da reprovação")
+
+
 def _campanha_to_dict(c: Campanha) -> dict[str, object]:
     return {
         "id": c.id,
@@ -76,7 +92,7 @@ def _campanha_to_dict(c: Campanha) -> dict[str, object]:
 
 
 def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
-    """Cria roteador com operações do agregado Campanha."""
+    """Cria roteador com operações do agregado Campanha e fluxo de moderação."""
     router = APIRouter()
 
     @router.post("/campanhas", status_code=status.HTTP_201_CREATED)
@@ -85,7 +101,6 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
         x_user_id: str | None = Header(default=None, alias="X-User-ID"),
         x_user_perfil: str | None = Header(default=None, alias="X-User-Perfil"),
     ) -> JSONResponse:
-        # Define o id do empreendedor priorizando o cabeçalho seguro do gateway
         empreendedor_id = x_user_id or dados.empreendedor_id
         if not empreendedor_id:
             raise HTTPException(
@@ -105,7 +120,6 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
                 detail="Apenas usuários com perfil EMPREENDEDOR podem criar campanhas.",
             )
 
-        # Validação do Prazo
         if dados.prazo_fim <= dados.prazo_inicio:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -146,6 +160,29 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
             content=_campanha_to_dict(campanha_criada),
         )
 
+    @router.get("/campanhas")
+    async def listar_campanhas_endpoint(
+        status_filtro: str | None = Query(default=None, alias="status"),
+    ) -> JSONResponse:
+        status_enum: DomainStatus | None = None
+        if status_filtro:
+            try:
+                status_enum = DomainStatus(status_filtro)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Status '{status_filtro}' inválido.",
+                ) from exc
+
+        def operacao(conn: sqlite3.Connection) -> list[Campanha]:
+            return listar_campanhas(conn, status_enum)
+
+        campanhas = transaction(operacao, "campanhas", data_dir)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=[_campanha_to_dict(c) for c in campanhas],
+        )
+
     @router.get("/campanhas/{campanha_id}")
     async def obter_campanha(campanha_id: str) -> JSONResponse:
         def operacao(conn: sqlite3.Connection) -> Campanha | None:
@@ -163,7 +200,7 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
         )
 
     @router.put("/campanhas/{campanha_id}")
-    async def atualizar_campanha(
+    async def atualizar_campanha_endpoint(
         campanha_id: str,
         dados: AtualizarCampanhaRequest,
         x_user_id: str | None = Header(default=None, alias="X-User-ID"),
@@ -208,12 +245,7 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=str(exc),
             ) from exc
-        except TransicaoInvalidaError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
-            ) from exc
-        except ConcorrenciaOtimistaError as exc:
+        except (TransicaoInvalidaError, ConcorrenciaOtimistaError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(exc),
@@ -229,10 +261,135 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
             content=_campanha_to_dict(campanha_atualizada),
         )
 
+    @router.post("/campanhas/{campanha_id}/submeter")
+    async def submeter_campanha(
+        campanha_id: str,
+        x_user_id: str | None = Header(default=None, alias="X-User-ID"),
+    ) -> JSONResponse:
+        def operacao(conn: sqlite3.Connection) -> Campanha:
+            campanha = obter_campanha_por_id(conn, campanha_id)
+            if campanha is None:
+                raise KeyError(f"Campanha '{campanha_id}' não encontrada.")
+
+            if x_user_id and x_user_id != campanha.empreendedor_id:
+                raise PermissionError("Apenas o empreendedor dono da campanha pode submetê-la.")
+
+            versao_anterior = campanha.versao
+            campanha.submeter()
+            repo_atualizar_campanha(conn, campanha, versao_anterior)
+            return campanha
+
+        try:
+            campanha_submetida = transaction(operacao, "campanhas", data_dir)
+        except KeyError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except (TransicaoInvalidaError, ConcorrenciaOtimistaError) as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=_campanha_to_dict(campanha_submetida),
+        )
+
+    @router.post("/campanhas/{campanha_id}/aprovar")
+    async def aprovar_campanha(
+        campanha_id: str,
+        x_user_perfil: str | None = Header(default=None, alias="X-User-Perfil"),
+        x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
+    ) -> JSONResponse:
+        if x_user_perfil != "ADMIN":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso restrito a administradores.",
+            )
+
+        def operacao(conn: sqlite3.Connection) -> Campanha:
+            campanha = obter_campanha_por_id(conn, campanha_id)
+            if campanha is None:
+                raise KeyError(f"Campanha '{campanha_id}' não encontrada.")
+
+            versao_anterior = campanha.versao
+            campanha.aprovar()
+            repo_atualizar_campanha(conn, campanha, versao_anterior)
+
+            evento = CampanhaPublicada(
+                campanha_id=campanha.id,
+                empreendedor_id=campanha.empreendedor_id,
+                meta=campanha.meta.centavos,
+                prazo_fim=campanha.prazo.fim,
+            )
+            add(
+                conn,
+                OutboxEvent(
+                    agregado_id=campanha.id,
+                    tipo_evento=CAMPANHA_PUBLICADA,
+                    payload=evento.model_dump(by_alias=True, mode="json"),
+                    correlation_id=x_correlation_id or str(uuid4()),
+                ),
+            )
+            return campanha
+
+        try:
+            campanha_aprovada = transaction(operacao, "campanhas", data_dir)
+        except KeyError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except (TransicaoInvalidaError, ConcorrenciaOtimistaError) as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=_campanha_to_dict(campanha_aprovada),
+        )
+
+    @router.post("/campanhas/{campanha_id}/reprovar")
+    async def reprovar_campanha(
+        campanha_id: str,
+        dados: ReprovarCampanhaRequest,
+        x_user_perfil: str | None = Header(default=None, alias="X-User-Perfil"),
+    ) -> JSONResponse:
+        if x_user_perfil != "ADMIN":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso restrito a administradores.",
+            )
+
+        motivo_limpo = dados.motivo.strip()
+        if not motivo_limpo:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="O motivo da reprovação é obrigatório.",
+            )
+
+        def operacao(conn: sqlite3.Connection) -> Campanha:
+            campanha = obter_campanha_por_id(conn, campanha_id)
+            if campanha is None:
+                raise KeyError(f"Campanha '{campanha_id}' não encontrada.")
+
+            versao_anterior = campanha.versao
+            campanha.reprovar(motivo_limpo)
+            repo_atualizar_campanha(conn, campanha, versao_anterior)
+            return campanha
+
+        try:
+            campanha_reprovada = transaction(operacao, "campanhas", data_dir)
+        except KeyError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        except (TransicaoInvalidaError, ConcorrenciaOtimistaError) as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=_campanha_to_dict(campanha_reprovada),
+        )
+
     @router.get("/campanhas/{campanha_id}/status")
     async def obter_status_campanha(campanha_id: str) -> CampanhaStatusResponse:
-        """Endpoint síncrono para verificação de status (usado pelo microsserviço Aportes)."""
-
         def operacao(conn: sqlite3.Connection) -> Campanha | None:
             return obter_campanha_por_id(conn, campanha_id)
 
@@ -243,7 +400,6 @@ def criar_campanhas_router(data_dir: str | Path = "data") -> APIRouter:
                 detail=f"Campanha '{campanha_id}' não encontrada.",
             )
 
-        # Mapeamento para o contrato com Aportes
         status_contrato: ContractStatus
         if campanha.status == DomainStatus.PUBLICADA:
             status_contrato = ContractStatus.PUBLICADA

@@ -23,42 +23,76 @@ O agregado raiz `Campanha` encapsula as regras centrais de captação de recurso
 
 ---
 
-## 2. Projeção Local de Usuários (`usuarios_cache`)
+## 2. Ciclo de Vida e Máquina de Estados
 
-Para preservar a autonomia do microsserviço e evitar acoplamento síncrono em runtime com a Identidade:
+```text
+[RASCUNHO]
+    │
+    │  POST /campanhas/:id/submeter (empreendedor dono)
+    ▼
+[EM_MODERACAO]
+    ├── POST /campanhas/:id/aprovar (ADMIN)  ──>  [PUBLICADA] (ativa, emite evento)
+    │
+    └── POST /campanhas/:id/reprovar (ADMIN) ──>  [REPROVADA] (terminal)
+```
 
-- **Eventos Consumidos:**
-  - `usuario.cadastrado` (`UsuarioCadastrado`): projeta o cadastro do usuário com seu perfil (`EMPREENDEDOR`, `INVESTIDOR`, `ADMIN`).
-  - `usuario.status-alterado` (`UsuarioStatusAlterado`): atualiza o status de bloqueio/desbloqueio (`ATIVO`, `BLOQUEADO`), respeitando monotonicidade temporal (`alteradoEm`).
-- **Regra de Criação de Campanhas:**
-  - Apenas usuários com `perfil == "EMPREENDEDOR"` e status `"ATIVO"` podem criar campanhas.
-  - Tentativas por usuários com perfil `INVESTIDOR` ou status `BLOQUEADO` são bloqueadas com código HTTP `403 Forbidden`.
+- **Transições Permitidas:**
+  - `RASCUNHO` -> `EM_MODERACAO`: submissão realizada pelo empreendedor dono.
+  - `EM_MODERACAO` -> `PUBLICADA`: aprovação exclusiva de administradores (`X-User-Perfil: ADMIN`).
+  - `EM_MODERACAO` -> `REPROVADA`: reprovação exclusiva de administradores com preenchimento obrigatório de justificativa (`motivo`).
+- **Regra 9 (REPROVADA nunca vira ATIVA):**
+  - O estado `REPROVADA` é terminal e irreversível.
+  - Tentativas de submissão, aprovação ou edição de uma campanha reprovada são rejeitadas com `409 Conflict`.
 
 ---
 
-## 3. Endpoints HTTP da API
+## 3. Mensageria e Publicação de Eventos (Transactional Outbox)
+
+- **Eventos Consumidos:**
+  - `usuario.cadastrado` (`UsuarioCadastrado`): projeta o cadastro do usuário na tabela `usuarios_cache` com seu perfil (`EMPREENDEDOR`, `INVESTIDOR`, `ADMIN`).
+  - `usuario.status-alterado` (`UsuarioStatusAlterado`): atualiza o status de bloqueio/desbloqueio (`ATIVO`, `BLOQUEADO`), respeitando monotonicidade temporal (`alteradoEm`).
+- **Evento Publicado na Aprovação (`CampanhaPublicada`):**
+  - Ao aprovar uma campanha (`POST /campanhas/:id/aprovar`), o microsserviço insere o evento no tópico `campanha.publicada` na tabela `outbox_evento` **dentro da mesma transação atômica** em que o status é atualizado para `PUBLICADA`.
+  - O payload segue o contrato `contracts.eventos.CampanhaPublicada`:
+    ```json
+    {
+      "campanhaId": "uuid",
+      "empreendedorId": "uuid",
+      "meta": 1000000,
+      "prazoFim": "2026-12-20T12:00:00+00:00"
+    }
+    ```
+  - Nem a submissão nem a reprovação publicam esse evento.
+
+---
+
+## 4. Endpoints HTTP da API
 
 Prefixos suportados diretamente no serviço ou roteados pelo Gateway (`/api/campanhas/*` encaminhado para `/campanhas/*`):
 
 | Método | Caminho | Descrição | Permissão | Status Sucesso |
 |---|---|---|---|---|
 | `POST` | `/campanhas` | Cria uma nova campanha no status `RASCUNHO` | `EMPREENDEDOR` ativo | `201 Created` |
-| `GET` | `/campanhas/{id}` | Consulta detalhes e dados completos da campanha | Público / Autenticado | `200 OK` |
+| `GET` | `/campanhas` | Lista campanhas cadastradas (filtro `?status=EM_MODERACAO`) | Autenticado | `200 OK` |
+| `GET` | `/campanhas/{id}` | Consulta detalhes completos da campanha | Autenticado | `200 OK` |
 | `PUT` | `/campanhas/{id}` | Atualiza dados (meta, prazo, título, descrição) de um rascunho | Empreendedor dono | `200 OK` |
-| `GET` | `/campanhas/{id}/status` | Endpoint síncrono de status consumido por Aportes | Serviços da plataforma | `200 OK` |
+| `POST` | `/campanhas/{id}/submeter` | Envia a campanha para a fila de moderação | Empreendedor dono | `200 OK` |
+| `POST` | `/campanhas/{id}/aprovar` | Aprova campanha e publica `CampanhaPublicada` | `ADMIN` | `200 OK` |
+| `POST` | `/campanhas/{id}/reprovar` | Reprova campanha registrando motivo (Regra 9) | `ADMIN` | `200 OK` |
+| `GET` | `/campanhas/{id}/status` | Endpoint síncrono consumido pelo microsserviço Aportes | Serviços internos | `200 OK` |
 
 ### Tratamento de Erros
 
 Os erros seguem o padrão da plataforma: `{"error": {"code", "message", "details", "correlationId"}}`:
 - `400 Bad Request`: identificação do empreendedor ausente.
-- `403 Forbidden`: usuário sem permissão (não é empreendedor ativo ou não é dono da campanha).
+- `403 Forbidden`: permissão negada (não é empreendedor ativo, não é dono da campanha ou não é administrador).
 - `404 Not Found`: campanha não encontrada.
-- `409 Conflict`: edição fora de `RASCUNHO` ou conflito de concorrência de versão.
-- `422 Unprocessable Entity`: meta inválida (<= 0) ou prazo final anterior/igual ao inicial.
+- `409 Conflict`: transição inválida de estado (ex.: edição fora de rascunho, violação da Regra 9) ou concorrência otimista.
+- `422 Unprocessable Entity`: meta <= 0, prazo final anterior/igual ao inicial ou motivo de reprovação vazio.
 
 ---
 
-## 4. Testes
+## 5. Testes
 
 ```bash
 # Executar todos os testes de campanhas:
