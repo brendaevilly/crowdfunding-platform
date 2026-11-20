@@ -222,3 +222,237 @@ def test_aporte_antes_da_campanha_pode_ser_reprocessado(
     assert campanha.status_code == 200
     assert segunda.status_code == 200
     assert segunda.json()["processed"] is True
+
+
+def test_resultado_sucesso_liquida_campanha_via_http(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Processa resultado via HTTP e liquida a campanha uma única vez."""
+    from contracts.topicos import RESULTADO_CAMPANHA
+    from shared.db import open_db
+
+    monkeypatch.setenv("CUSTODIA_TAXA_PERCENTUAL", "10")
+
+    resultado_payload = {
+        "campanhaId": "campanha-1",
+        "empreendedorId": "empreendedor-1",
+        "resultado": "SUCESSO",
+        "valorArrecadado": 100000,
+        "investidorIds": ["investidor-1"],
+        "encerradaEm": "2026-11-20T00:00:00Z",
+    }
+
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        campanha = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-liquidacao",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+        assert campanha.status_code == 200
+
+        aporte = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-aporte-liquidacao",
+                APORTE_CONFIRMADO,
+                {
+                    "aporteId": "aporte-liquidacao",
+                    "campanhaId": "campanha-1",
+                    "investidorId": "investidor-1",
+                    "valor": 100000,
+                    "confirmadoEm": "2026-11-20T00:00:00Z",
+                },
+            ),
+        )
+        assert aporte.status_code == 200
+
+        # Simula o resultado persistido pela apuração da Issue #26.
+        with open_db("custodia_retornos", tmp_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO custodia_resultados (
+                    campanha_id, resultado, valor_arrecadado, encerrada_em
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "campanha-1",
+                    "SUCESSO",
+                    100000,
+                    "2026-11-20T00:00:00+00:00",
+                ),
+            )
+
+        entrega = criar_entrega(
+            "evento-resultado-liquidacao",
+            RESULTADO_CAMPANHA,
+            resultado_payload,
+        )
+
+        primeira = client.post("/events", json=entrega)
+        segunda = client.post("/events", json=entrega)
+
+    assert primeira.status_code == 200
+    assert primeira.json()["processed"] is True
+    assert segunda.status_code == 200
+    assert segunda.json()["processed"] is False
+
+    with open_db("custodia_retornos", tmp_path) as conn:
+        saldo = conn.execute(
+            """
+            SELECT saldo_retido
+            FROM custodia_contas
+            WHERE campanha_id = ?
+            """,
+            ("campanha-1",),
+        ).fetchone()
+
+        movimentacoes = conn.execute(
+            """
+            SELECT tipo, valor
+            FROM custodia_movimentacoes
+            WHERE campanha_id = ?
+            """,
+            ("campanha-1",),
+        ).fetchall()
+
+        liquidacoes = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM custodia_liquidacoes
+            WHERE campanha_id = ?
+            """,
+            ("campanha-1",),
+        ).fetchone()
+
+    assert saldo is not None and saldo[0] == 0
+    assert sorted(movimentacoes) == [
+        ("LIBERACAO", 90000),
+        ("RETENCAO", 100000),
+        ("TAXA", 10000),
+    ]
+    assert liquidacoes is not None and liquidacoes[0] == 1
+
+
+def test_resultado_falha_devolve_aportes_via_http(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Devolve integralmente os aportes quando a campanha falha."""
+    from contracts.topicos import RESULTADO_CAMPANHA
+    from shared.db import open_db
+
+    monkeypatch.setenv("CUSTODIA_TAXA_PERCENTUAL", "10")
+
+    encerrada = "2026-11-20T00:00:00Z"
+
+    resultado_payload = {
+        "campanhaId": "campanha-1",
+        "empreendedorId": "empreendedor-1",
+        "resultado": "FALHA",
+        "valorArrecadado": 90000,
+        "investidorIds": ["investidor-1", "investidor-2"],
+        "encerradaEm": encerrada,
+    }
+
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-falha",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+
+        for indice, investidor, valor in (
+            (1, "investidor-1", 60000),
+            (2, "investidor-2", 30000),
+        ):
+            resposta = client.post(
+                "/events",
+                json=criar_entrega(
+                    f"evento-aporte-falha-{indice}",
+                    APORTE_CONFIRMADO,
+                    {
+                        "aporteId": f"aporte-falha-{indice}",
+                        "campanhaId": "campanha-1",
+                        "investidorId": investidor,
+                        "valor": valor,
+                        "confirmadoEm": encerrada,
+                    },
+                ),
+            )
+            assert resposta.status_code == 200
+
+        with open_db("custodia_retornos", tmp_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO custodia_resultados (
+                    campanha_id, resultado, valor_arrecadado, encerrada_em
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                ("campanha-1", "FALHA", 90000, encerrada),
+            )
+
+        resposta = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-resultado-falha",
+                RESULTADO_CAMPANHA,
+                resultado_payload,
+            ),
+        )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["processed"] is True
+
+    with open_db("custodia_retornos", tmp_path) as conn:
+        saldo = conn.execute(
+            """
+            SELECT saldo_retido
+            FROM custodia_contas
+            WHERE campanha_id = ?
+            """,
+            ("campanha-1",),
+        ).fetchone()
+
+        devolucoes = conn.execute(
+            """
+            SELECT aporte_id, valor
+            FROM custodia_movimentacoes
+            WHERE campanha_id = ? AND tipo = 'DEVOLUCAO'
+            ORDER BY aporte_id
+            """,
+            ("campanha-1",),
+        ).fetchall()
+
+        liquidacoes = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM custodia_liquidacoes
+            WHERE campanha_id = ?
+            """,
+            ("campanha-1",),
+        ).fetchone()
+
+        eventos = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM outbox_evento
+            WHERE tipo_evento = 'campanha.liquidada'
+            """,
+        ).fetchone()
+
+    assert saldo is not None and saldo[0] == 0
+    assert devolucoes == [
+        ("aporte-falha-1", 60000),
+        ("aporte-falha-2", 30000),
+    ]
+    assert liquidacoes is not None and liquidacoes[0] == 1
+    assert eventos is not None and eventos[0] == 0

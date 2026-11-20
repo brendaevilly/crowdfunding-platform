@@ -103,6 +103,7 @@ Envelope de todo evento (schemaVersion atual: **1**): `eventId`, `topic`, `schem
 | `taxaPlataforma` | inteiro (centavos) | sim |
 | `valorLiquido` | inteiro (centavos) | sim |
 | `liquidadaEm` | data/hora UTC (ISO 8601) | sim |
+| `aportes` | lista de typing.Annotated[str, StringConstraints(strip_whitespace=True, to_upper=None, to_lower=None, strict=None, min_length=1, max_length=64, pattern=None, ascii_only=None)] | não |
 
 ### ResultadoCampanha (`campanha.resultado`)
 
