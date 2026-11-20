@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from broker.rabbitmq import publish_to_rabbitmq
 from shared.db import migrate, transaction
 
 router = APIRouter()
@@ -75,4 +76,6 @@ def publish_event(data: PublishRequest) -> dict[str, str | bool | int]:
             "deliveries": len(subscribers),
         }
 
-    return transaction(save_event, "broker")
+    resultado = transaction(save_event, "broker")
+    publish_to_rabbitmq(data.topic, data.eventId, data.payload, data.correlationId)
+    return resultado

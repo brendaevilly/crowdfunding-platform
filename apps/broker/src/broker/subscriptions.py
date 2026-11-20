@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from broker.rabbitmq import setup_rabbitmq_subscription
 from shared.db import migrate, transaction
 
 router = APIRouter()
@@ -41,6 +42,7 @@ def create_subscription(data: SubscriptionRequest) -> dict[str, str | bool]:
         return cursor.rowcount == 1
 
     created = transaction(save_subscription, "broker")
+    setup_rabbitmq_subscription(data.service, data.topic)
 
     return {
         "service": data.service,

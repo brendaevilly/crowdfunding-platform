@@ -467,15 +467,43 @@ def criar_app(
 
     diretorio_estatico = Path(__file__).resolve().parents[2] / "static"
 
-    @app.get("/", response_class=Response, include_in_schema=False)
-    async def index() -> Response:
-        index_file = diretorio_estatico / "index.html"
-        if not index_file.is_file():
-            raise AppError(404, "nao_encontrado", "Página inicial não encontrada.")
+    def _servir_pagina(nome_arquivo: str) -> Response:
+        arquivo = diretorio_estatico / nome_arquivo
+        if not arquivo.is_file():
+            raise AppError(404, "nao_encontrado", f"Página '{nome_arquivo}' não encontrada.")
         return Response(
-            content=index_file.read_bytes(),
+            content=arquivo.read_bytes(),
             media_type="text/html; charset=utf-8",
         )
+
+    @app.get("/", response_class=Response, include_in_schema=False)
+    async def index() -> Response:
+        return _servir_pagina("index.html")
+
+    @app.get("/login", response_class=Response, include_in_schema=False)
+    @app.get("/login.html", response_class=Response, include_in_schema=False)
+    async def pagina_login() -> Response:
+        return _servir_pagina("login.html")
+
+    @app.get("/cadastro", response_class=Response, include_in_schema=False)
+    @app.get("/cadastro.html", response_class=Response, include_in_schema=False)
+    async def pagina_cadastro() -> Response:
+        return _servir_pagina("cadastro.html")
+
+    @app.get("/campanha", response_class=Response, include_in_schema=False)
+    @app.get("/campanha.html", response_class=Response, include_in_schema=False)
+    async def pagina_campanha() -> Response:
+        return _servir_pagina("campanha.html")
+
+    @app.get("/aporte", response_class=Response, include_in_schema=False)
+    @app.get("/aporte.html", response_class=Response, include_in_schema=False)
+    async def pagina_aporte() -> Response:
+        return _servir_pagina("aporte.html")
+
+    @app.get("/dashboard", response_class=Response, include_in_schema=False)
+    @app.get("/dashboard.html", response_class=Response, include_in_schema=False)
+    async def pagina_dashboard() -> Response:
+        return _servir_pagina("dashboard.html")
 
     @app.get("/static/{arquivo:path}", response_class=Response, include_in_schema=False)
     async def static_files(arquivo: str) -> Response:

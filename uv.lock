@@ -300,12 +300,14 @@ source = { editable = "apps/broker" }
 dependencies = [
     { name = "crowdfunding-contracts" },
     { name = "crowdfunding-shared" },
+    { name = "pika" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "crowdfunding-contracts", editable = "packages/contracts" },
     { name = "crowdfunding-shared", editable = "packages/shared" },
+    { name = "pika", specifier = ">=1.5.0" },
 ]
 
 [[package]]
@@ -401,6 +403,7 @@ source = { editable = "packages/shared" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "pika" },
     { name = "uvicorn" },
 ]
 
@@ -408,6 +411,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "pika", specifier = ">=1.5.0" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
 
@@ -757,6 +761,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload-time = "2026-04-27T01:46:08.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
+]
+
+[[package]]
+name = "pika"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/5b/0970a9bcdff70c87ad81a3bdb38bdc500e8ffc11427d9f8716c00e8321de/pika-1.5.0.tar.gz", hash = "sha256:339afb9b2f55b31e03ebd1d96308e72e1d1d8e0e2c4ccea57d0f3d72fd10f333", size = 199837, upload-time = "2026-11-17T15:57:48.769Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/f5/9af08e02515a20341791263501c60c4ed099f3e429b77451da04a5ef1f99/pika-1.5.0-py3-none-any.whl", hash = "sha256:bc474e3ffbfd8aeafa0ae05709e54b6d4bda13cb4cfeed8a8413df71e0f7f97a", size = 209891, upload-time = "2026-11-17T15:57:47.607Z" },
 ]
 
 [[package]]

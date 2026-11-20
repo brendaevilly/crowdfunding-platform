@@ -73,3 +73,28 @@ def test_path_traversal_na_pasta_estatica_rejeitado() -> None:
         resp = client.get("/static/../pyproject.toml")
         # FastAPI/Starlette ou o handler do Gateway bloqueia antes de vazar
         assert resp.status_code in (403, 404)
+
+
+def test_paginas_separadas_login_e_cadastro() -> None:
+    """Verifica que /login e /cadastro (e seus .html) são servidos em páginas dedicadas."""
+    app = criar_app()
+    with TestClient(app) as client:
+        resp_login = client.get("/login")
+        assert resp_login.status_code == 200
+        assert "Entrar na sua conta" in resp_login.text
+
+        resp_cad = client.get("/cadastro")
+        assert resp_cad.status_code == 200
+        assert "Criar sua conta" in resp_cad.text
+
+        resp_camp = client.get("/campanha.html")
+        assert resp_camp.status_code == 200
+        assert "Detalhes da Campanha" in resp_camp.text
+
+        resp_apo = client.get("/aporte.html")
+        assert resp_apo.status_code == 200
+        assert "Contribua com o projeto" in resp_apo.text
+
+        resp_dash = client.get("/dashboard.html")
+        assert resp_dash.status_code == 200
+        assert "Meu Painel de Investimentos" in resp_dash.text
