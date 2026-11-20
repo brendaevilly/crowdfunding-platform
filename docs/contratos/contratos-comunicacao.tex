@@ -149,6 +149,7 @@ Campo & Tipo & Obrigatório \\
 \texttt{taxaPlataforma} & inteiro (centavos) & sim \\
 \texttt{valorLiquido} & inteiro (centavos) & sim \\
 \texttt{liquidadaEm} & data/hora UTC (ISO 8601) & sim \\
+\texttt{aportes} & lista de typing.Annotated[str, StringConstraints(strip\_whitespace=True, to\_upper=None, to\_lower=None, strict=None, min\_length=1, max\_length=64, pattern=None, ascii\_only=None)] & não \\
 \hline
 \end{tabular}
 

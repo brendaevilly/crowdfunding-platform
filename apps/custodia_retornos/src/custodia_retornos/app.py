@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,17 +13,23 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from contracts.topicos import APORTE_CONFIRMADO, CAMPANHA_PUBLICADA
+from contracts.topicos import (
+    APORTE_CONFIRMADO,
+    CAMPANHA_PUBLICADA,
+    RESULTADO_CAMPANHA,
+)
 from custodia_retornos.config import broker_url_padrao, custodia_url_padrao
 from custodia_retornos.custodia.apuracao import apurar_pendentes
 from custodia_retornos.custodia.clock import AdjustableClock, Clock, SystemClock
 from custodia_retornos.custodia.consumidores import (
     consumir_aporte_confirmado,
     consumir_campanha_publicada,
+    consumir_resultado_campanha,
 )
+from custodia_retornos.custodia.repositorio import listar_movimentacoes
 from custodia_retornos.custodia.scheduler import executar_scheduler
 from shared.consumer import EventHandler
-from shared.db import migrate
+from shared.db import migrate, transaction
 from shared.http.app import create_app
 from shared.messaging import configure_messaging
 from shared.messaging_schema import install_messaging_schema
@@ -34,6 +41,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 HANDLERS: dict[str, EventHandler] = {
     CAMPANHA_PUBLICADA: consumir_campanha_publicada,
     APORTE_CONFIRMADO: consumir_aporte_confirmado,
+    RESULTADO_CAMPANHA: consumir_resultado_campanha,
 }
 
 
@@ -75,6 +83,74 @@ def criar_custodia_app(
                 "now": agora.isoformat(),
                 "apuradas": quantidade,
             }
+
+    @app.get("/custodia/campanhas/{campanha_id}/extrato")
+    def consultar_extrato(campanha_id: str) -> dict[str, object]:
+        """Retorna o extrato financeiro completo de uma campanha."""
+
+        def consultar(conn: sqlite3.Connection) -> dict[str, object]:
+            conta = conn.execute(
+                """
+                SELECT campanha_id, empreendedor_id, meta,
+                       saldo_retido, prazo_fim
+                FROM custodia_contas
+                WHERE campanha_id = ?
+                """,
+                (campanha_id,),
+            ).fetchone()
+
+            if conta is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Conta de custódia não encontrada",
+                )
+
+            movimentacoes = listar_movimentacoes(conn, campanha_id)
+
+            liquidacao = conn.execute(
+                """
+                SELECT resultado, valor_bruto, taxa_plataforma,
+                       valor_liquido, liquidada_em
+                FROM custodia_liquidacoes
+                WHERE campanha_id = ?
+                """,
+                (campanha_id,),
+            ).fetchone()
+
+            return {
+                "campanha_id": str(conta[0]),
+                "empreendedor_id": conta[1],
+                "meta": int(conta[2]),
+                "saldo_retido": int(conta[3]),
+                "prazo_fim": str(conta[4]),
+                "movimentacoes": [
+                    {
+                        "movimentacao_id": m.movimentacao_id,
+                        "aporte_id": m.aporte_id,
+                        "tipo": m.tipo.value,
+                        "valor": m.valor,
+                        "criada_em": m.criada_em.isoformat(),
+                    }
+                    for m in movimentacoes
+                ],
+                "liquidacao": (
+                    {
+                        "resultado": str(liquidacao[0]),
+                        "valor_bruto": int(liquidacao[1]),
+                        "taxa_plataforma": int(liquidacao[2]),
+                        "valor_liquido": int(liquidacao[3]),
+                        "liquidada_em": str(liquidacao[4]),
+                    }
+                    if liquidacao is not None
+                    else None
+                ),
+            }
+
+        return transaction(
+            consultar,
+            "custodia_retornos",
+            data_dir,
+        )
 
     @asynccontextmanager
     async def custodia_lifespan(application: FastAPI) -> AsyncIterator[None]:

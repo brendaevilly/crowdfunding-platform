@@ -18,3 +18,8 @@ def custodia_url_padrao() -> str:
 def broker_url_padrao() -> str:
     """URL base do broker de eventos."""
     return os.getenv("BROKER_URL", service_url("broker"))
+
+
+def percentual_taxa_padrao() -> str:
+    """Retorna o percentual de taxa configurado para a plataforma."""
+    return os.getenv("CUSTODIA_TAXA_PERCENTUAL", "0")

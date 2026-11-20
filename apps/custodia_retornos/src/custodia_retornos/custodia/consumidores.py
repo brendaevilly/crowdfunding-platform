@@ -131,3 +131,31 @@ def consumir_aporte_confirmado(
             evento.valor,
             evento.aporte_id,
         )
+
+
+def consumir_resultado_campanha(
+    conn: sqlite3.Connection,
+    payload: dict[str, Any],
+) -> None:
+    """Executa a liquidação quando a campanha é apurada."""
+
+    from decimal import Decimal
+
+    from contracts.eventos import ResultadoCampanha
+    from custodia_retornos.config import percentual_taxa_padrao
+    from custodia_retornos.custodia.servico_liquidacao import liquidar_campanha
+
+    evento = ResultadoCampanha.model_validate(payload)
+
+    liquidar_campanha(
+        conn,
+        evento.campanha_id,
+        Decimal(percentual_taxa_padrao()),
+        agora=evento.encerrada_em,
+    )
+
+    logger.info(
+        "Liquidação processada para campanha %s: %s",
+        evento.campanha_id,
+        evento.resultado.value,
+    )

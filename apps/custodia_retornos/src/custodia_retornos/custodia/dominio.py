@@ -12,6 +12,7 @@ class TipoMovimentacao(StrEnum):
     RETENCAO = "RETENCAO"
     LIBERACAO = "LIBERACAO"
     DEVOLUCAO = "DEVOLUCAO"
+    TAXA = "TAXA"
 
 
 @dataclass(frozen=True)
