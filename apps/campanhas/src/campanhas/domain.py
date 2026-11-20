@@ -143,3 +143,44 @@ class Campanha:
         self.prazo = Prazo(prazo_inicio, prazo_fim)
         self.versao += 1
         self.atualizado_em = datetime.now(UTC)
+
+    def submeter(self) -> None:
+        """Transição de RASCUNHO para EM_MODERACAO."""
+        if self.status != StatusCampanha.RASCUNHO:
+            raise TransicaoInvalidaError(
+                f"Apenas campanhas em RASCUNHO podem ser submetidas para moderação "
+                f"(status atual: {self.status.value})."
+            )
+        self.status = StatusCampanha.EM_MODERACAO
+        self.versao += 1
+        self.atualizado_em = datetime.now(UTC)
+
+    def aprovar(self) -> None:
+        """Transição de EM_MODERACAO para PUBLICADA."""
+        if self.status == StatusCampanha.REPROVADA:
+            raise TransicaoInvalidaError(
+                "Campanha REPROVADA nunca pode ser aprovada ou reativada (Regra 9)."
+            )
+        if self.status != StatusCampanha.EM_MODERACAO:
+            raise TransicaoInvalidaError(
+                f"Apenas campanhas em EM_MODERACAO podem ser aprovadas "
+                f"(status atual: {self.status.value})."
+            )
+        self.status = StatusCampanha.PUBLICADA
+        self.versao += 1
+        self.atualizado_em = datetime.now(UTC)
+
+    def reprovar(self, motivo: str) -> None:
+        """Transição de EM_MODERACAO para REPROVADA com motivo obrigatório."""
+        motivo_limpo = motivo.strip() if motivo else ""
+        if not motivo_limpo:
+            raise ValueError("O motivo da reprovação é obrigatório.")
+        if self.status != StatusCampanha.EM_MODERACAO:
+            raise TransicaoInvalidaError(
+                f"Apenas campanhas em EM_MODERACAO podem ser reprovadas "
+                f"(status atual: {self.status.value})."
+            )
+        self.status = StatusCampanha.REPROVADA
+        self.motivo_reprovacao = motivo_limpo
+        self.versao += 1
+        self.atualizado_em = datetime.now(UTC)

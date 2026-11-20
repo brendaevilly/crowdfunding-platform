@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,19 +30,32 @@ def inicializar_banco(data_dir: str | Path = "data") -> None:
 
 def _row_to_campanha(row: sqlite3.Row | tuple[Any, ...]) -> Campanha:
     """Converte linha do banco para a entidade Campanha."""
+    prazo_inicio = datetime.fromisoformat(row[5])
+    if prazo_inicio.tzinfo is None:
+        prazo_inicio = prazo_inicio.replace(tzinfo=UTC)
+    prazo_fim = datetime.fromisoformat(row[6])
+    if prazo_fim.tzinfo is None:
+        prazo_fim = prazo_fim.replace(tzinfo=UTC)
+    criado_em = datetime.fromisoformat(row[11])
+    if criado_em.tzinfo is None:
+        criado_em = criado_em.replace(tzinfo=UTC)
+    atualizado_em = datetime.fromisoformat(row[12])
+    if atualizado_em.tzinfo is None:
+        atualizado_em = atualizado_em.replace(tzinfo=UTC)
+
     return Campanha(
         id=str(row[0]),
         empreendedor_id=str(row[1]),
         titulo=str(row[2]),
         descricao=str(row[3]),
         meta=Meta(int(row[4])),
-        prazo=Prazo(datetime.fromisoformat(row[5]), datetime.fromisoformat(row[6])),
+        prazo=Prazo(prazo_inicio, prazo_fim),
         status=StatusCampanha(str(row[7])),
         valor_arrecadado=int(row[8]),
         motivo_reprovacao=str(row[9]) if row[9] is not None else None,
         versao=int(row[10]),
-        criado_em=datetime.fromisoformat(row[11]),
-        atualizado_em=datetime.fromisoformat(row[12]),
+        criado_em=criado_em,
+        atualizado_em=atualizado_em,
     )
 
 
@@ -140,3 +153,84 @@ def atualizar_campanha_rascunho(
                 f"mas versão atual é {atual.versao}."
             )
         raise RuntimeError("Não foi possível atualizar a campanha.")
+
+
+def atualizar_campanha(
+    conn: sqlite3.Connection,
+    campanha: Campanha,
+    versao_esperada: int,
+) -> None:
+    """Atualiza o estado de uma campanha usando controle de concorrência otimista."""
+    cursor = conn.execute(
+        """
+        UPDATE campanhas
+        SET
+            titulo = ?,
+            descricao = ?,
+            meta = ?,
+            prazo_inicio = ?,
+            prazo_fim = ?,
+            status = ?,
+            valor_arrecadado = ?,
+            motivo_reprovacao = ?,
+            versao = versao + 1,
+            atualizado_em = ?
+        WHERE id = ? AND versao = ?
+        """,
+        (
+            campanha.titulo,
+            campanha.descricao,
+            campanha.meta.centavos,
+            campanha.prazo.inicio.isoformat(),
+            campanha.prazo.fim.isoformat(),
+            campanha.status.value,
+            campanha.valor_arrecadado,
+            campanha.motivo_reprovacao,
+            campanha.atualizado_em.isoformat(),
+            campanha.id,
+            versao_esperada,
+        ),
+    )
+
+    if cursor.rowcount == 0:
+        atual = obter_campanha_por_id(conn, campanha.id)
+        if atual is None:
+            raise KeyError(f"Campanha '{campanha.id}' não encontrada.")
+        if atual.versao != versao_esperada:
+            raise ConcorrenciaOtimistaError(
+                f"Conflito de concorrência: versão esperada {versao_esperada}, "
+                f"mas versão atual é {atual.versao}."
+            )
+        raise RuntimeError("Não foi possível atualizar a campanha.")
+
+
+def listar_campanhas(
+    conn: sqlite3.Connection,
+    status: StatusCampanha | None = None,
+) -> list[Campanha]:
+    """Lista campanhas cadastradas, opcionalmente filtrando por status."""
+    if status is not None:
+        cursor = conn.execute(
+            """
+            SELECT
+                id, empreendedor_id, titulo, descricao, meta,
+                prazo_inicio, prazo_fim, status, valor_arrecadado,
+                motivo_reprovacao, versao, criado_em, atualizado_em
+            FROM campanhas
+            WHERE status = ?
+            ORDER BY criado_em DESC
+            """,
+            (status.value,),
+        )
+    else:
+        cursor = conn.execute(
+            """
+            SELECT
+                id, empreendedor_id, titulo, descricao, meta,
+                prazo_inicio, prazo_fim, status, valor_arrecadado,
+                motivo_reprovacao, versao, criado_em, atualizado_em
+            FROM campanhas
+            ORDER BY criado_em DESC
+            """
+        )
+    return [_row_to_campanha(row) for row in cursor.fetchall()]
