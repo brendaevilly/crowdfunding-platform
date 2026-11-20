@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,6 +26,7 @@ from notificacao.consumidores import (
     consumir_retorno_distribuido,
 )
 from notificacao.repository import inicializar_banco
+from notificacao.ttl import run_ttl_cleaner
 from shared.consumer import EventHandler
 from shared.http.app import create_app
 from shared.messaging import configure_messaging
@@ -47,11 +49,38 @@ def criar_notificacao_app(data_dir: str | Path = "data") -> FastAPI:
     app.include_router(rotas)
     app.include_router(rotas, prefix="/notificacao")
 
+    habilitar_ttl = os.getenv("NOTIFICACAO_TTL_ENABLED", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
     @asynccontextmanager
     async def notificacao_lifespan(application: FastAPI) -> AsyncIterator[None]:
         inicializar_banco(data_dir)
         logger.info("Banco de Notificação inicializado com sucesso.")
-        yield
+
+        stop_event = threading.Event()
+        ttl_thread: threading.Thread | None = None
+
+        if habilitar_ttl:
+            ttl_thread = threading.Thread(
+                target=run_ttl_cleaner,
+                kwargs={
+                    "data_dir": data_dir,
+                    "should_stop": stop_event.is_set,
+                },
+                daemon=True,
+                name="notificacao-ttl-cleaner",
+            )
+            ttl_thread.start()
+
+        try:
+            yield
+        finally:
+            if ttl_thread is not None:
+                stop_event.set()
+                ttl_thread.join(timeout=3.0)
 
     app.router.lifespan_context = notificacao_lifespan
 
