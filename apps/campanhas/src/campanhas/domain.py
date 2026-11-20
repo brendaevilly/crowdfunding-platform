@@ -198,3 +198,31 @@ class Campanha:
         self.motivo_reprovacao = motivo_limpo
         self.versao += 1
         self.atualizado_em = datetime.now(UTC)
+
+    def atualizar_arrecadacao(self, valor_acumulado: int) -> bool:
+        """Atualização estritamente crescente do valor arrecadado (monotônica).
+
+        Ignora valores menores ou iguais ao montante atual.
+        """
+        if valor_acumulado > self.valor_arrecadado:
+            self.valor_arrecadado = valor_acumulado
+            self.atualizado_em = datetime.now(UTC)
+            return True
+        return False
+
+    def encerrar(self) -> bool:
+        """Transiciona de PUBLICADA para ENCERRADA.
+
+        Idempotente por agregado: se já estiver ENCERRADA, atua como no-op e retorna False.
+        """
+        if self.status == StatusCampanha.ENCERRADA:
+            return False
+        if self.status != StatusCampanha.PUBLICADA:
+            raise TransicaoInvalidaError(
+                f"Apenas campanhas PUBLICADAS podem ser encerradas "
+                f"(status atual: {self.status.value})."
+            )
+        self.status = StatusCampanha.ENCERRADA
+        self.versao += 1
+        self.atualizado_em = datetime.now(UTC)
+        return True
