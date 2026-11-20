@@ -162,9 +162,7 @@ def test_reconstruir_encerramento_campanha(
                 "service": "notificacao",
                 "level": "INFO",
                 "logger": "notificacao.consumidores",
-                "message": (
-                    "Evento ResultadoCampanha recebido; notificando investidores"
-                ),
+                "message": ("Evento ResultadoCampanha recebido; notificando investidores"),
                 "correlationId": cid_encerramento,
             }
         )

@@ -163,8 +163,7 @@ def coletar_do_banco(data_dir: Path, correlation_id: str) -> list[dict[str, Any]
                             "level": "INFO",
                             "logger": "broker.events",
                             "message": (
-                                f"Evento '{row['topic']}' ({row['event_id']}) "
-                                "registrado no broker"
+                                f"Evento '{row['topic']}' ({row['event_id']}) registrado no broker"
                             ),
                             "extra": {
                                 "eventId": row["event_id"],
