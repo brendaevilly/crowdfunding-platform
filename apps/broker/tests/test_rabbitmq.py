@@ -24,12 +24,19 @@ def test_get_rabbitmq_url_customizada(monkeypatch):
     assert get_rabbitmq_url() == "amqp://user:pass@rabbitmq.local:5672/vhost"
 
 
-def test_is_rabbitmq_available_falso_quando_indisponivel():
+def test_is_rabbitmq_available_falso_quando_desabilitado(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "false")
+    assert is_rabbitmq_available() is False
+
+
+def test_is_rabbitmq_available_falso_quando_indisponivel(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "true")
     with patch("pika.BlockingConnection", side_effect=Exception("Sem conexão")):
         assert is_rabbitmq_available() is False
 
 
-def test_is_rabbitmq_available_verdadeiro_quando_conecta():
+def test_is_rabbitmq_available_verdadeiro_quando_conecta(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "true")
     mock_conn = MagicMock()
     with patch("pika.BlockingConnection", return_value=mock_conn):
         assert is_rabbitmq_available() is True
@@ -61,7 +68,8 @@ def test_setup_rabbitmq_topology():
     )
 
 
-def test_publish_to_rabbitmq_sucesso():
+def test_publish_to_rabbitmq_sucesso(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "true")
     mock_conn = MagicMock()
     mock_channel = MagicMock()
     mock_conn.__enter__.return_value = mock_conn
@@ -79,7 +87,13 @@ def test_publish_to_rabbitmq_sucesso():
         mock_channel.basic_publish.assert_called_once()
 
 
-def test_publish_to_rabbitmq_resiliente_com_falha():
+def test_publish_to_rabbitmq_desabilitado_retorna_falso(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "false")
+    assert publish_to_rabbitmq(topic="x", event_id="1", payload={}) is False
+
+
+def test_publish_to_rabbitmq_resiliente_com_falha(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "true")
     with patch("pika.BlockingConnection", side_effect=Exception("Falha de conexão")):
         sucesso = publish_to_rabbitmq(
             topic="AporteConfirmado",
@@ -89,7 +103,8 @@ def test_publish_to_rabbitmq_resiliente_com_falha():
         assert sucesso is False
 
 
-def test_setup_rabbitmq_subscription_sucesso():
+def test_setup_rabbitmq_subscription_sucesso(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_ENABLED", "true")
     mock_conn = MagicMock()
     mock_channel = MagicMock()
     mock_conn.__enter__.return_value = mock_conn

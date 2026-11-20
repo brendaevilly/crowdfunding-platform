@@ -650,6 +650,16 @@ function initLoginPage() {
   const form = document.getElementById("form-login-standalone");
   if (!form) return;
 
+  // Preenche o e-mail automaticamente se veio redirecionado do cadastro
+  const emailParam = getQueryParam("email");
+  if (emailParam) {
+    const emailInput = document.getElementById("login-email");
+    if (emailInput) {
+      emailInput.value = emailParam;
+      document.getElementById("login-senha")?.focus();
+    }
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-login");
@@ -666,9 +676,21 @@ function initLoginPage() {
       });
 
       const token = res.access_token || res.token;
-      const user = res.usuario || { email, perfil: res.perfil || "INVESTIDOR", nome: email.split("@")[0] };
+      let user = res.usuario || { email, perfil: res.perfil || "INVESTIDOR", nome: email.split("@")[0] };
 
       salvarSessao(token, user);
+
+      // Tenta obter o perfil completo atualizado do banco
+      try {
+        const me = await apiFetch("/api/identidade/usuarios/me");
+        if (me && me.id) {
+          user = me;
+          salvarSessao(token, user);
+        }
+      } catch (errPerfil) {
+        console.warn("Perfil /usuarios/me não pôde ser carregado imediatamente:", errPerfil);
+      }
+
       exibirAlerta("login-alert", "Login realizado com sucesso!", "success");
 
       const redirect = getQueryParam("redirect") || "/dashboard.html";

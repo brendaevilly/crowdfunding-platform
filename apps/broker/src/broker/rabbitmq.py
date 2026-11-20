@@ -21,8 +21,15 @@ def get_rabbitmq_url() -> str:
     return os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 
 
+def is_rabbitmq_enabled() -> bool:
+    """Verifica se a integração externa com RabbitMQ está habilitada."""
+    return os.getenv("RABBITMQ_ENABLED", "false").lower() in ("true", "1", "yes")
+
+
 def is_rabbitmq_available() -> bool:
     """Verifica se o servidor RabbitMQ está acessível."""
+    if not is_rabbitmq_enabled():
+        return False
     try:
         params = pika.URLParameters(get_rabbitmq_url())
         params.socket_timeout = 1.0
@@ -64,6 +71,8 @@ def publish_to_rabbitmq(
     correlation_id: str | None = None,
 ) -> bool:
     """Publica um evento no RabbitMQ usando routing key = topic."""
+    if not is_rabbitmq_enabled():
+        return False
     try:
         params = pika.URLParameters(get_rabbitmq_url())
         params.socket_timeout = 2.0
@@ -108,6 +117,8 @@ def publish_to_rabbitmq(
 
 def setup_rabbitmq_subscription(service: str, topic: str) -> bool:
     """Cria uma fila para o serviço no RabbitMQ e faz o bind com o tópico."""
+    if not is_rabbitmq_enabled():
+        return False
     try:
         params = pika.URLParameters(get_rabbitmq_url())
         params.socket_timeout = 2.0

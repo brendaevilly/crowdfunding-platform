@@ -192,6 +192,7 @@ class Launcher:
                 "anterior? Encerre-o e tente de novo."
             )
         env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+        env.setdefault("IDENTIDADE_AUTO_ATIVAR", "true")
         env["PYTHONPATH"] = os.pathsep.join(
             [str(RAIZ / "apps" / nome / "src"), *filter(None, [env.get("PYTHONPATH")])]
         )

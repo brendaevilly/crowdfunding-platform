@@ -167,6 +167,13 @@ def autenticar_usuario(
     ):
         raise CredenciaisInvalidasErro(mensagem_erro)
 
+    if usuario.status == StatusUsuario.BLOQUEADO:
+        raise CredenciaisInvalidasErro("Usuário bloqueado pelo administrador")
+
+    if usuario.status == StatusUsuario.PENDENTE:
+        ativar_usuario(usuario.id, data_dir=data_dir)
+        usuario = usuario.ativar()
+
     if usuario.status != StatusUsuario.ATIVO:
         raise CredenciaisInvalidasErro(mensagem_erro)
 
