@@ -341,6 +341,11 @@ def criar_app(
 
         alvo = destino.caminho
 
+        # A rota de desenvolvimento da custódia não possui
+        # o prefixo /retornos utilizado pelas demais rotas.
+        if path == "/api/retornos/_dev/clock/advance":
+            alvo = "/_dev/clock/advance"
+
         if request.url.query:
             alvo += f"?{request.url.query}"
 

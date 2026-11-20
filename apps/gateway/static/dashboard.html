@@ -30,82 +30,263 @@
     <div class="dashboard-header">
       <h1 class="hero-title" style="font-size: 2.4rem;">Meu Painel de Investimentos</h1>
       <p id="dashboard-user-greeting" class="section-subtitle">
-        Acompanhe seus aportes, participações, retornos e notificações em tempo real.
+        Acompanhe seus investimentos, gerencie campanhas e acompanhe suas operações em tempo real.
       </p>
     </div>
 
-    <!-- Grid do Dashboard -->
-    <div class="dashboard-grid">
-      <!-- Coluna Esquerda: Aportes e Participações -->
-      <div>
-        <!-- Card de Aportes -->
-        <div class="dashboard-card">
-          <div class="dashboard-card-title">
-            <span>Meus Aportes</span>
-            <button id="btn-refresh-aportes" class="btn btn-secondary btn-sm">Atualizar</button>
+    <!-- Navegação em Abas do Painel -->
+    <nav class="dashboard-nav-tabs" aria-label="Abas do Painel">
+      <button class="dash-tab-btn active" data-dash-tab="pane-investidor">Investimentos</button>
+      <button class="dash-tab-btn" data-dash-tab="pane-empreendedor">Área do Empreendedor</button>
+      <button class="dash-tab-btn" data-dash-tab="pane-admin">Administração</button>
+      <button class="dash-tab-btn" data-dash-tab="pane-dev">Dev & Simulação</button>
+    </nav>
+
+    <!-- ABA 1: INVESTIDOR -->
+    <section id="pane-investidor" class="dash-tab-pane active">
+      <div class="dashboard-grid">
+        <!-- Coluna Esquerda: Aportes e Participações -->
+        <div>
+          <!-- Card de Aportes -->
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Meus Aportes</span>
+              <button id="btn-refresh-aportes" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+            <div id="table-aportes-container" style="overflow-x: auto;">
+              <p class="text-muted">Carregando aportes...</p>
+            </div>
           </div>
-          <div id="table-aportes-container" style="overflow-x: auto;">
-            <p class="text-muted">Carregando aportes...</p>
+
+          <!-- Card de Participações e Retornos -->
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Participações & Retornos</span>
+              <button id="btn-refresh-retornos" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+            <div id="table-retornos-container" style="overflow-x: auto;">
+              <p class="text-muted">Carregando participações e retornos...</p>
+            </div>
           </div>
         </div>
 
-        <!-- Card de Participações e Retornos -->
-        <div class="dashboard-card">
-          <div class="dashboard-card-title">
-            <span>Participações & Retornos</span>
-            <button id="btn-refresh-retornos" class="btn btn-secondary btn-sm">Atualizar</button>
+        <!-- Coluna Direita: Status KYC & Notificações -->
+        <div>
+          <!-- Card de KYC -->
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Identidade (KYC)</span>
+              <span id="kyc-badge" class="badge-status warning">Pendente</span>
+            </div>
+            <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 16px;">
+              A validação do documento é necessária para efetuar aportes com segurança jurídica.
+            </p>
+
+            <form id="form-dashboard-kyc">
+              <div class="form-group">
+                <label for="dash-kyc-tipo">Tipo de Documento</label>
+                <select id="dash-kyc-tipo" class="form-control">
+                  <option value="CPF" selected>CPF</option>
+                  <option value="RG">RG</option>
+                  <option value="CNPJ">CNPJ</option>
+                  <option value="PASSAPORTE">Passaporte</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-top: 12px;">
+                <label for="dash-kyc-numero">Número do Documento</label>
+                <input type="text" id="dash-kyc-numero" class="form-control" required placeholder="000.000.000-00">
+              </div>
+              <button type="submit" id="btn-submit-kyc" class="btn btn-primary btn-block btn-sm" style="margin-top: 16px;">
+                Validar Documento
+              </button>
+            </form>
+            <div id="kyc-feedback" style="margin-top: 12px; font-size: 0.95rem;"></div>
           </div>
-          <div id="table-retornos-container" style="overflow-x: auto;">
-            <p class="text-muted">Carregando participações e retornos...</p>
+
+          <!-- Card de Notificações -->
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Notificações</span>
+              <button id="btn-refresh-notificacoes" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+            <div id="notifications-list-container">
+              <p class="text-muted">Nenhuma notificação encontrada.</p>
+            </div>
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- Coluna Direita: Status KYC & Notificações -->
-      <div>
-        <!-- Card de KYC -->
-        <div class="dashboard-card">
-          <div class="dashboard-card-title">
-            <span>Identidade (KYC)</span>
-            <span id="kyc-badge" class="badge-status warning">Pendente</span>
+    <!-- ABA 2: ÁREA DO EMPREENDEDOR -->
+    <section id="pane-empreendedor" class="dash-tab-pane">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+          <h2 style="font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;">Painel do Empreendedor</h2>
+          <p class="text-muted" style="margin-top: 4px;">Gerencie suas campanhas, crie rascunhos e distribua retornos aos investidores.</p>
+        </div>
+        <button id="btn-atualizar-empreendedor" class="btn btn-secondary btn-sm">Atualizar Campanhas</button>
+      </div>
+
+      <div class="grid-2-col">
+        <!-- Coluna 1: Criar / Editar Rascunho & Distribuição -->
+        <div>
+          <div class="dashboard-card">
+            <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 16px;">Criar ou Editar Campanha</h3>
+            <form id="form-campanha">
+              <input type="hidden" id="campanha-id">
+              <input type="hidden" id="campanha-versao">
+
+              <div class="form-group">
+                <label for="campanha-titulo">Título da Campanha</label>
+                <input id="campanha-titulo" class="form-control" required maxlength="120" placeholder="Ex: Laboratório Maker Comunitário">
+              </div>
+
+              <div class="form-group" style="margin-top: 14px;">
+                <label for="campanha-descricao">Descrição detalhada</label>
+                <textarea id="campanha-descricao" class="form-control" required rows="4" placeholder="Descreva os objetivos, impacto e plano de execução..."></textarea>
+              </div>
+
+              <div class="form-group" style="margin-top: 14px;">
+                <label for="campanha-meta">Meta de Arrecadação (R$)</label>
+                <input id="campanha-meta" class="form-control" type="number" min="0.01" step="0.01" required placeholder="Ex: 50000.00">
+              </div>
+
+              <div class="grid-2-col" style="margin-top: 14px;">
+                <div class="form-group">
+                  <label for="campanha-inicio">Data de Início</label>
+                  <input id="campanha-inicio" class="form-control" type="datetime-local" required>
+                </div>
+                <div class="form-group">
+                  <label for="campanha-fim">Data de Encerramento</label>
+                  <input id="campanha-fim" class="form-control" type="datetime-local" required>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button type="submit" class="btn btn-primary btn-sm">Salvar rascunho</button>
+                <button type="button" id="btn-cancelar-edicao" class="btn btn-secondary btn-sm">Limpar formulário</button>
+              </div>
+            </form>
+            <div id="campanha-feedback" class="feedback"></div>
           </div>
-          <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 16px;">
-            A validação do documento é necessária para efetuar aportes com segurança jurídica.
-          </p>
 
-          <form id="form-dashboard-kyc">
-            <div class="form-group">
-              <label for="dash-kyc-tipo">Tipo de Documento</label>
-              <select id="dash-kyc-tipo" class="form-control">
-                <option value="CPF" selected>CPF</option>
-                <option value="RG">RG</option>
-                <option value="CNPJ">CNPJ</option>
-                <option value="PASSAPORTE">Passaporte</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-top: 12px;">
-              <label for="dash-kyc-numero">Número do Documento</label>
-              <input type="text" id="dash-kyc-numero" class="form-control" required placeholder="000.000.000-00">
-            </div>
-            <button type="submit" id="btn-submit-kyc" class="btn btn-primary btn-block btn-sm" style="margin-top: 16px;">
-              Validar Documento
-            </button>
-          </form>
-          <div id="kyc-feedback" style="margin-top: 12px; font-size: 0.95rem;"></div>
+          <div class="dashboard-card" style="margin-top: 24px;">
+            <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 16px;">Distribuição de Retornos</h3>
+            <p class="text-muted" style="font-size: 0.95rem; margin-bottom: 16px;">
+              Distribua proporcionalmente os lucros ou amortizações aos investidores de campanhas encerradas com sucesso.
+            </p>
+            <form id="form-distribuir-retornos">
+              <div class="form-group">
+                <label for="retorno-campanha-id">ID da Campanha</label>
+                <input id="retorno-campanha-id" class="form-control" required placeholder="Ex: campanha-1234">
+              </div>
+              <div class="form-group" style="margin-top: 14px;">
+                <label for="retorno-valor">Valor Total a Distribuir (R$)</label>
+                <input id="retorno-valor" class="form-control" type="number" min="0.01" step="0.01" required placeholder="Ex: 2500.00">
+              </div>
+              <button type="submit" class="btn btn-success btn-sm" style="margin-top: 20px;">
+                Distribuir retornos
+              </button>
+            </form>
+            <div id="retorno-feedback" class="feedback"></div>
+          </div>
         </div>
 
-        <!-- Card de Notificações -->
-        <div class="dashboard-card">
-          <div class="dashboard-card-title">
-            <span>Notificações</span>
-            <button id="btn-refresh-notificacoes" class="btn btn-secondary btn-sm">Atualizar</button>
-          </div>
-          <div id="notifications-list-container">
-            <p class="text-muted">Nenhuma notificação encontrada.</p>
+        <!-- Coluna 2: Minhas Campanhas -->
+        <div>
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Minhas Campanhas</span>
+            </div>
+            <div id="minhas-campanhas-container">
+              <p class="text-muted">Carregue suas campanhas para visualizar.</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- ABA 3: ADMINISTRAÇÃO -->
+    <section id="pane-admin" class="dash-tab-pane">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <div>
+          <h2 style="font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;">Painel Administrativo</h2>
+          <p class="text-muted" style="margin-top: 4px;">Moderação de campanhas, moderação de KYC e governança de usuários.</p>
+        </div>
+        <button id="btn-atualizar-admin" class="btn btn-secondary btn-sm">Atualizar Painel</button>
+      </div>
+
+      <div class="grid-2-col">
+        <!-- Coluna 1: Fila de Moderação -->
+        <div>
+          <div class="dashboard-card">
+            <div class="dashboard-card-title">
+              <span>Fila de Moderação de Campanhas</span>
+            </div>
+            <div id="fila-moderacao-container">
+              <p class="text-muted">Nenhuma campanha aguardando moderação no momento.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coluna 2: Gestão de Usuários & Fila KYC -->
+        <div>
+          <!-- Bloqueio / Desbloqueio -->
+          <div class="dashboard-card">
+            <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 16px;">Gerenciamento de Usuários</h3>
+            <form id="form-bloquear-usuario">
+              <div class="form-group">
+                <label for="admin-usuario-id">ID do Usuário</label>
+                <input id="admin-usuario-id" class="form-control" required placeholder="Ex: usuario-uuid">
+              </div>
+              <div class="form-group" style="margin-top: 14px;">
+                <label for="admin-motivo-bloqueio">Justificativa / Motivo</label>
+                <textarea id="admin-motivo-bloqueio" class="form-control" rows="3" placeholder="Motivo do bloqueio ou desbloqueio..."></textarea>
+              </div>
+              <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button type="submit" class="btn btn-danger btn-sm">Bloquear usuário</button>
+                <button type="button" id="btn-desbloquear-usuario" class="btn btn-secondary btn-sm">Desbloquear usuário</button>
+              </div>
+            </form>
+            <div id="admin-usuario-feedback" class="feedback"></div>
+          </div>
+
+          <!-- Fila de KYC -->
+          <div class="dashboard-card" style="margin-top: 24px;">
+            <div class="dashboard-card-title">
+              <span>Fila de Verificação de Identidade (KYC)</span>
+              <button type="button" id="btn-atualizar-kyc-admin" class="btn btn-secondary btn-sm">Atualizar fila</button>
+            </div>
+            <div id="fila-kyc-lista">
+              <p class="text-muted">Clique em atualizar para carregar as verificações pendentes.</p>
+            </div>
+            <div id="admin-kyc-feedback" class="feedback"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABA 4: DEV & SIMULAÇÃO -->
+    <section id="pane-dev" class="dash-tab-pane">
+      <div class="dashboard-card" style="max-width: 680px; margin: 0 auto;">
+        <h2 style="font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px;">Controle do Relógio Virtual</h2>
+        <p class="text-muted" style="margin-bottom: 24px;">
+          Avance o tempo simulado da plataforma para testar o encerramento automático das campanhas, expiração de prazos e apuração de custódia e retornos.
+        </p>
+
+        <form id="form-avancar-relogio">
+          <div class="form-group">
+            <label for="clock-segundos">Avançar tempo (em segundos)</label>
+            <input id="clock-segundos" class="form-control" type="number" min="1" step="1" value="3600" required>
+            <small class="text-muted" style="display: block; margin-top: 6px;">Ex: 3600 = 1 hora, 86400 = 1 dia, 604800 = 1 semana.</small>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top: 20px;">
+            Avançar relógio
+          </button>
+        </form>
+        <div id="clock-feedback" class="feedback"></div>
+      </div>
+    </section>
   </main>
 
   <!-- Rodapé -->

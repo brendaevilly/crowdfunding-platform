@@ -761,7 +761,29 @@ async function initDashboardPage() {
     greeting.textContent = `Olá, ${state.user.nome || state.user.email}! Aqui está o resumo das suas operações e participações na plataforma.`;
   }
 
-  // Carrega seções
+  // Navegação entre abas do Painel
+  const tabBtns = document.querySelectorAll(".dash-tab-btn");
+  const tabPanes = document.querySelectorAll(".dash-tab-pane");
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.dataset.dashTab;
+      tabBtns.forEach((b) => b.classList.remove("active"));
+      tabPanes.forEach((p) => p.classList.remove("active"));
+
+      btn.classList.add("active");
+      document.getElementById(targetId)?.classList.add("active");
+
+      if (targetId === "pane-empreendedor") {
+        carregarMinhasCampanhas();
+      } else if (targetId === "pane-admin") {
+        carregarFilaModeracao();
+        carregarFilaKYC();
+      }
+    });
+  });
+
+  // Carrega seções da aba Investidor
   await carregarStatusKYCDashboard();
   await carregarAportesDashboard();
   await carregarRetornosDashboard();
@@ -804,6 +826,60 @@ async function initDashboardPage() {
         btn.textContent = "Validar Documento";
       }
     });
+  }
+
+  // Eventos da Área do Empreendedor
+  document.getElementById("form-campanha")?.addEventListener("submit", handleSalvarCampanha);
+  document.getElementById("btn-cancelar-edicao")?.addEventListener("click", limparFormularioCampanha);
+  document.getElementById("btn-atualizar-empreendedor")?.addEventListener("click", carregarMinhasCampanhas);
+  document.getElementById("form-distribuir-retornos")?.addEventListener("submit", handleDistribuirRetornos);
+
+  document.getElementById("minhas-campanhas-container")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-acao]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.acao === "editar") {
+      editarCampanha(id);
+    } else if (btn.dataset.acao === "submeter") {
+      await submeterCampanha(id);
+    }
+  });
+
+  // Eventos do Painel Administrativo
+  document.getElementById("btn-atualizar-admin")?.addEventListener("click", () => {
+    carregarFilaModeracao();
+    carregarFilaKYC();
+  });
+  document.getElementById("btn-atualizar-kyc-admin")?.addEventListener("click", carregarFilaKYC);
+  document.getElementById("form-bloquear-usuario")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    alterarBloqueioUsuario(true);
+  });
+  document.getElementById("btn-desbloquear-usuario")?.addEventListener("click", () => {
+    alterarBloqueioUsuario(false);
+  });
+
+  document.getElementById("fila-kyc-lista")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-kyc-acao]");
+    if (!btn) return;
+    decidirKYC(btn.dataset.id, btn.dataset.kycAcao);
+  });
+
+  document.getElementById("fila-moderacao-container")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-admin-acao]");
+    if (!btn) return;
+    moderarCampanha(btn.dataset.id, btn.dataset.adminAcao);
+  });
+
+  // Eventos do Painel Dev
+  document.getElementById("form-avancar-relogio")?.addEventListener("submit", handleAvancarRelogio);
+
+  // Se o usuário logado for EMPREENDEDOR, abre diretamente na aba correspondente
+  if (state.user?.perfil === "EMPREENDEDOR") {
+    const empBtn = document.querySelector('.dash-tab-btn[data-dash-tab="pane-empreendedor"]');
+    if (empBtn) {
+      empBtn.click();
+    }
   }
 }
 
@@ -945,3 +1021,440 @@ async function carregarNotificacoesDashboard() {
     container.innerHTML = `<p class="text-muted" style="padding: 16px 0;">Nenhuma notificação recente.</p>`;
   }
 }
+
+// ==========================================
+// PAINEL DO EMPREENDEDOR & ADMIN (ISSUE #33)
+// ==========================================
+
+state.minhasCampanhas = [];
+
+function obterIdUsuarioToken() {
+  if (state.user?.id) return state.user.id;
+  try {
+    const partes = state.token.split(".");
+    const payload = JSON.parse(atob(partes[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.sub;
+  } catch {
+    return state.user?.id || "";
+  }
+}
+
+function escaparHTML(valor) {
+  return String(valor ?? "").replace(/[&<>"']/g, (caractere) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[caractere]);
+}
+
+function dataParaCampo(valor) {
+  if (!valor) return "";
+  const data = new Date(valor);
+  const deslocamento = data.getTimezoneOffset();
+  return new Date(data.getTime() - deslocamento * 60000).toISOString().slice(0, 16);
+}
+
+function feedbackAdmin(id, mensagem, erro = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = mensagem;
+  el.className = erro ? "feedback error" : "feedback success";
+}
+
+function prepararDadosCampanha() {
+  const meta = Number(document.getElementById("campanha-meta").value);
+  if (!Number.isFinite(meta) || meta <= 0) {
+    throw new Error("Informe uma meta de arrecadação válida.");
+  }
+
+  const inicio = new Date(document.getElementById("campanha-inicio").value);
+  const fim = new Date(document.getElementById("campanha-fim").value);
+
+  if (!Number.isFinite(inicio.getTime()) || !Number.isFinite(fim.getTime()) || fim <= inicio) {
+    throw new Error("A data de encerramento deve ser posterior à data inicial.");
+  }
+
+  return {
+    titulo: document.getElementById("campanha-titulo").value.trim(),
+    descricao: document.getElementById("campanha-descricao").value.trim(),
+    meta: Math.round(meta * 100),
+    prazoInicio: inicio.toISOString(),
+    prazoFim: fim.toISOString(),
+  };
+}
+
+function limparFormularioCampanha() {
+  document.getElementById("form-campanha")?.reset();
+  const idEl = document.getElementById("campanha-id");
+  if (idEl) idEl.value = "";
+  const vEl = document.getElementById("campanha-versao");
+  if (vEl) vEl.value = "";
+
+  const submitBtn = document.querySelector("#form-campanha button[type='submit']");
+  if (submitBtn) submitBtn.textContent = "Salvar rascunho";
+}
+
+async function carregarMinhasCampanhas() {
+  const container = document.getElementById("minhas-campanhas-container");
+  if (!container) return;
+
+  try {
+    if (!state.token || !state.user) {
+      container.innerHTML = '<p class="text-muted">Faça login para gerenciar suas campanhas.</p>';
+      return;
+    }
+
+    container.innerHTML = '<p class="text-muted">Carregando campanhas do empreendedor...</p>';
+
+    const usuarioId = obterIdUsuarioToken();
+    const res = await apiFetch("/api/campanhas?limite=100");
+    const itens = Array.isArray(res) ? res : res?.itens || res?.items || [];
+
+    state.minhasCampanhas = itens.filter(
+      (c) => c.empreendedorId === usuarioId || c.empreendedor_id === usuarioId
+    );
+
+    if (!state.minhasCampanhas.length) {
+      container.innerHTML = `
+        <div style="background: var(--bg-secondary); border: 1px dashed var(--border-light); border-radius: var(--radius-md); padding: 32px; text-align: center;">
+          <h4 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 8px;">Você ainda não possui campanhas</h4>
+          <p class="text-muted" style="margin-bottom: 0;">Utilize o formulário ao lado para criar seu primeiro rascunho.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = state.minhasCampanhas
+      .map((c) => {
+        const meta = Number(c.meta) || 0;
+        const arrecadado = Number(c.valorArrecadado || c.valor_arrecadado) || 0;
+        const percentual = meta > 0 ? Math.min(100, (arrecadado / meta) * 100) : 0;
+        const podeEditar = c.status === "RASCUNHO";
+        const podeSubmeter = c.status === "RASCUNHO";
+
+        let badgeClass = "warning";
+        if (c.status === "PUBLICADA" || c.status === "ENCERRADA_SUCESSO") badgeClass = "success";
+        if (c.status === "REPROVADA") badgeClass = "danger";
+
+        return `
+        <div class="item-card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <h4 style="margin: 0;">${escaparHTML(c.titulo)}</h4>
+            <span class="badge-status ${badgeClass}">${escaparHTML(c.status)}</span>
+          </div>
+          <p style="margin-bottom: 16px;">${escaparHTML(c.descricao)}</p>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; font-size: 0.95rem;">
+            <div><strong>Meta:</strong> ${formatarCentavos(meta)}</div>
+            <div><strong>Arrecadado:</strong> ${formatarCentavos(arrecadado)} (${percentual.toFixed(1)}%)</div>
+          </div>
+
+          <div class="progress-bar-container" style="margin-bottom: 16px;">
+            <div class="progress-bar-fill" style="width: ${percentual}%;"></div>
+          </div>
+
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+            Prazo final: ${escaparHTML(new Date(c.prazoFim || c.prazo_fim).toLocaleDateString("pt-BR"))} | ID: ${escaparHTML(c.id)}
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            ${podeEditar ? `<button class="btn btn-secondary btn-sm" data-acao="editar" data-id="${escaparHTML(c.id)}">Editar Rascunho</button>` : ""}
+            ${podeSubmeter ? `<button class="btn btn-primary btn-sm" data-acao="submeter" data-id="${escaparHTML(c.id)}">Submeter para Moderação</button>` : ""}
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+  } catch (err) {
+    container.innerHTML = `<p class="text-muted">Erro ao carregar campanhas: ${err.message}</p>`;
+  }
+}
+
+async function handleSalvarCampanha(e) {
+  e.preventDefault();
+  const feedback = document.getElementById("campanha-feedback");
+
+  try {
+    const dados = prepararDadosCampanha();
+    const campanhaId = document.getElementById("campanha-id")?.value;
+
+    await apiFetch(
+      campanhaId ? `/api/campanhas/${encodeURIComponent(campanhaId)}` : "/api/campanhas",
+      {
+        method: campanhaId ? "PUT" : "POST",
+        body: JSON.stringify(dados),
+      }
+    );
+
+    if (feedback) {
+      feedback.textContent = campanhaId ? "Campanha atualizada com sucesso!" : "Rascunho criado com sucesso!";
+      feedback.className = "feedback success";
+    }
+
+    limparFormularioCampanha();
+    await carregarMinhasCampanhas();
+  } catch (err) {
+    if (feedback) {
+      feedback.textContent = err.message;
+      feedback.className = "feedback error";
+    }
+  }
+}
+
+function editarCampanha(id) {
+  const campanha = state.minhasCampanhas.find((item) => item.id === id);
+  if (!campanha) return;
+
+  if (campanha.status !== "RASCUNHO") {
+    alert("Somente campanhas em RASCUNHO podem ser editadas.");
+    return;
+  }
+
+  document.getElementById("campanha-id").value = campanha.id;
+  document.getElementById("campanha-titulo").value = campanha.titulo;
+  document.getElementById("campanha-descricao").value = campanha.descricao;
+  document.getElementById("campanha-meta").value = (campanha.meta / 100).toFixed(2);
+  document.getElementById("campanha-inicio").value = dataParaCampo(campanha.prazoInicio || campanha.prazo_inicio);
+  document.getElementById("campanha-fim").value = dataParaCampo(campanha.prazoFim || campanha.prazo_fim);
+
+  const submitBtn = document.querySelector("#form-campanha button[type='submit']");
+  if (submitBtn) submitBtn.textContent = "Salvar alterações";
+
+  document.getElementById("form-campanha")?.scrollIntoView({ behavior: "smooth" });
+}
+
+async function submeterCampanha(id) {
+  if (!confirm("Deseja enviar esta campanha para a fila de moderação?")) return;
+
+  try {
+    await apiFetch(`/api/campanhas/${encodeURIComponent(id)}/submeter`, { method: "POST" });
+    alert("Campanha enviada para moderação com sucesso!");
+    await carregarMinhasCampanhas();
+  } catch (err) {
+    alert(`Erro ao submeter campanha: ${err.message}`);
+  }
+}
+
+async function handleDistribuirRetornos(e) {
+  e.preventDefault();
+  const feedback = document.getElementById("retorno-feedback");
+
+  try {
+    const campanhaId = document.getElementById("retorno-campanha-id").value.trim();
+    const valor = Number(document.getElementById("retorno-valor").value);
+
+    if (!campanhaId || !Number.isFinite(valor) || valor <= 0) {
+      throw new Error("Informe a campanha e um valor válido.");
+    }
+
+    const resultado = await apiFetch(
+      `/api/retornos/campanhas/${encodeURIComponent(campanhaId)}/distribuir`,
+      {
+        method: "POST",
+        body: JSON.stringify({ valorTotal: Math.round(valor * 100) }),
+      }
+    );
+
+    if (feedback) {
+      feedback.textContent = `Distribuição realizada com sucesso! Total: ${formatarCentavos(resultado.valorTotal || resultado.valor_total || Math.round(valor * 100))}.`;
+      feedback.className = "feedback success";
+    }
+    document.getElementById("form-distribuir-retornos")?.reset();
+  } catch (err) {
+    if (feedback) {
+      feedback.textContent = err.message;
+      feedback.className = "feedback error";
+    }
+  }
+}
+
+async function carregarFilaModeracao() {
+  const container = document.getElementById("fila-moderacao-container");
+  if (!container) return;
+
+  container.innerHTML = '<p class="text-muted">Carregando fila de moderação...</p>';
+
+  try {
+    const res = await apiFetch("/api/campanhas?limite=100");
+    const itens = Array.isArray(res) ? res : res?.itens || res?.items || [];
+    const pendentes = itens.filter((c) => {
+      const s = String(c.status || "").toUpperCase();
+      return s.includes("MODER") || s.includes("ANALISE") || s === "PENDENTE" || s === "EM_ANALISE";
+    });
+
+    if (!pendentes.length) {
+      container.innerHTML = '<p class="text-muted">Nenhuma campanha aguardando moderação no momento.</p>';
+      return;
+    }
+
+    container.innerHTML = pendentes
+      .map(
+        (c) => `
+      <div class="item-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+          <h4 style="margin: 0;">${escaparHTML(c.titulo)}</h4>
+          <span class="badge-status warning">${escaparHTML(c.status)}</span>
+        </div>
+        <p>${escaparHTML(c.descricao)}</p>
+        <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">
+          ID: ${escaparHTML(c.id)} | Empreendedor: ${escaparHTML(c.empreendedorId || c.empreendedor_id)} | Meta: ${formatarCentavos(c.meta)}
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-success btn-sm" data-admin-acao="aprovar" data-id="${escaparHTML(c.id)}">Aprovar Campanha</button>
+          <button class="btn btn-danger btn-sm" data-admin-acao="reprovar" data-id="${escaparHTML(c.id)}">Reprovar Campanha</button>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+  } catch (err) {
+    container.innerHTML = `<p class="text-muted">Erro ao carregar fila: ${err.message}</p>`;
+  }
+}
+
+async function moderarCampanha(id, acao) {
+  try {
+    let body = {};
+    if (acao === "reprovar") {
+      const motivo = prompt("Informe o motivo da reprovação:");
+      if (!motivo || !motivo.trim()) return;
+      body = { motivo: motivo.trim() };
+    }
+
+    if (!confirm(`Deseja realmente ${acao} esta campanha?`)) return;
+
+    await apiFetch(`/api/campanhas/${encodeURIComponent(id)}/${acao}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    alert(`Campanha ${acao === "aprovar" ? "aprovada" : "reprovada"} com sucesso!`);
+    await carregarFilaModeracao();
+  } catch (err) {
+    alert(`Erro na moderação: ${err.message}`);
+  }
+}
+
+async function alterarBloqueioUsuario(bloquear) {
+  const id = document.getElementById("admin-usuario-id")?.value.trim();
+  const motivo = document.getElementById("admin-motivo-bloqueio")?.value.trim();
+
+  if (!id) {
+    feedbackAdmin("admin-usuario-feedback", "Informe o ID do usuário.", true);
+    return;
+  }
+
+  try {
+    await apiFetch(
+      `/api/identidade/usuarios/${encodeURIComponent(id)}/${bloquear ? "bloquear" : "desbloquear"}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ motivo }),
+      }
+    );
+
+    feedbackAdmin(
+      "admin-usuario-feedback",
+      bloquear ? "Usuário bloqueado com sucesso!" : "Usuário desbloqueado com sucesso!"
+    );
+  } catch (err) {
+    feedbackAdmin("admin-usuario-feedback", err.message, true);
+  }
+}
+
+async function carregarFilaKYC() {
+  const container = document.getElementById("fila-kyc-lista");
+  if (!container) return;
+
+  container.innerHTML = '<p class="text-muted">Carregando verificações pendentes...</p>';
+
+  try {
+    const res = await apiFetch("/api/identidade/kyc/admin/verificacoes/pendentes");
+    const lista = Array.isArray(res) ? res : [];
+
+    if (!lista.length) {
+      container.innerHTML = '<p class="text-muted">Nenhuma verificação de KYC pendente.</p>';
+      return;
+    }
+
+    container.innerHTML = lista
+      .map(
+        (v) => `
+      <div class="item-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+          <h4 style="margin: 0; font-size: 1.1rem;">Verificação de Identidade</h4>
+          <span class="badge-status warning">${escaparHTML(v.status)}</span>
+        </div>
+        <div style="font-size: 0.95rem; margin-bottom: 6px;">
+          <strong>Usuário:</strong> ${escaparHTML(v.usuarioId || v.usuario_id)}
+        </div>
+        <div style="font-size: 0.95rem; margin-bottom: 6px;">
+          <strong>Documento:</strong> ${escaparHTML(v.documentoTipo || v.documento_tipo || "CPF")}
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Solicitado em: ${v.criadoEm || v.criado_em ? new Date(v.criadoEm || v.criado_em).toLocaleString("pt-BR") : "Recente"}
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-success btn-sm" data-kyc-acao="APROVADA" data-id="${escaparHTML(v.usuarioId || v.usuario_id)}">Aprovar KYC</button>
+          <button class="btn btn-danger btn-sm" data-kyc-acao="REPROVADA" data-id="${escaparHTML(v.usuarioId || v.usuario_id)}">Reprovar KYC</button>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+  } catch (err) {
+    container.innerHTML = `<p class="text-muted">Erro ao carregar fila KYC: ${err.message}</p>`;
+  }
+}
+
+async function decidirKYC(usuarioId, status) {
+  const acao = status === "APROVADA" ? "aprovar" : "reprovar";
+  if (!confirm(`Deseja realmente ${acao} esta verificação KYC?`)) return;
+
+  try {
+    await apiFetch(
+      `/api/identidade/kyc/admin/verificacoes/${encodeURIComponent(usuarioId)}/decisao`,
+      {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      }
+    );
+
+    feedbackAdmin("admin-kyc-feedback", `Verificação KYC ${acao === "aprovar" ? "aprovada" : "reprovada"} com sucesso!`);
+    await carregarFilaKYC();
+  } catch (err) {
+    feedbackAdmin("admin-kyc-feedback", err.message, true);
+  }
+}
+
+async function handleAvancarRelogio(e) {
+  e.preventDefault();
+  const feedback = document.getElementById("clock-feedback");
+  const campo = document.getElementById("clock-segundos");
+  const segundos = Number(campo.value);
+
+  if (!Number.isFinite(segundos) || segundos <= 0) {
+    feedbackAdmin("clock-feedback", "Informe uma quantidade de segundos maior que zero.", true);
+    return;
+  }
+
+  feedbackAdmin("clock-feedback", "Avançando relógio virtual...");
+
+  try {
+    const res = await apiFetch("/api/retornos/_dev/clock/advance", {
+      method: "POST",
+      body: JSON.stringify({ seconds: segundos }),
+    });
+
+    const dataFormatada = new Date(res.now).toLocaleString("pt-BR");
+    feedbackAdmin(
+      "clock-feedback",
+      `Relógio avançado com sucesso! Nova data simulada: ${dataFormatada}. Campanhas apuradas: ${res.apuradas || 0}.`
+    );
+  } catch (err) {
+    feedbackAdmin("clock-feedback", err.message, true);
+  }
+}
+
