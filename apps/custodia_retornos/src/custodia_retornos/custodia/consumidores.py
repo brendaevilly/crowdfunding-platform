@@ -37,6 +37,22 @@ def consumir_campanha_publicada(
 
     criada = abrir_conta(conn, conta)
 
+    conn.execute(
+        """
+        UPDATE custodia_contas
+        SET empreendedor_id = ?
+        WHERE campanha_id = ?
+          AND (empreendedor_id IS NULL OR empreendedor_id = ?)
+        """,
+        (
+            evento.empreendedor_id,
+            evento.campanha_id,
+            evento.empreendedor_id,
+        ),
+    )
+    if conn.execute("SELECT changes()").fetchone()[0] != 1:
+        raise ValueError("Empreendedor divergente para a campanha")
+
     if criada:
         logger.info(
             "Conta de custódia aberta para campanha %s.",
@@ -59,6 +75,38 @@ def consumir_aporte_confirmado(
             f"Conta de custódia da campanha {evento.campanha_id} ainda não foi aberta."
         )
 
+    retencao_existente = conn.execute(
+        """
+        SELECT 1
+        FROM custodia_movimentacoes
+        WHERE aporte_id = ?
+          AND campanha_id = ?
+          AND tipo = 'RETENCAO'
+        """,
+        (evento.aporte_id, evento.campanha_id),
+    ).fetchone()
+
+    if retencao_existente is not None:
+        logger.info(
+            "Aporte %s já registrado; evento duplicado ignorado.",
+            evento.aporte_id,
+        )
+        return
+
+    resultado_existente = conn.execute(
+        """
+        SELECT 1
+        FROM custodia_resultados
+        WHERE campanha_id = ?
+        """,
+        (evento.campanha_id,),
+    ).fetchone()
+
+    if resultado_existente is not None:
+        raise ValueError(
+            f"Campanha {evento.campanha_id} já foi apurada; novos aportes não podem ser retidos"
+        )
+
     movimentacao = Movimentacao.criar_retencao(
         campanha_id=evento.campanha_id,
         aporte_id=evento.aporte_id,
@@ -68,6 +116,16 @@ def consumir_aporte_confirmado(
     registrada = registrar_movimentacao(conn, movimentacao)
 
     if registrada:
+        conn.execute(
+            """
+            INSERT INTO custodia_investidores (
+                campanha_id, investidor_id
+            )
+            VALUES (?, ?)
+            ON CONFLICT(campanha_id, investidor_id) DO NOTHING
+            """,
+            (evento.campanha_id, evento.investidor_id),
+        )
         logger.info(
             "Retenção de %d centavos registrada para o aporte %s.",
             evento.valor,
