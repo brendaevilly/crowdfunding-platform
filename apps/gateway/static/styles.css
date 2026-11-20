@@ -1110,3 +1110,131 @@ a:hover {
   font-size: 1rem;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Dashboard Tabs & Componentes do Empreendedor e Admin (Issue #33)
+   ========================================================================== */
+
+.dashboard-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--border-light);
+  margin-bottom: 32px;
+  overflow-x: auto;
+}
+
+.dash-tab-btn {
+  padding: 14px 24px;
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.dash-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.dash-tab-btn.active {
+  color: var(--btn-primary-bg);
+  border-bottom-color: var(--btn-primary-bg);
+}
+
+.dash-tab-pane {
+  display: none;
+}
+
+.dash-tab-pane.active {
+  display: block;
+}
+
+.btn-danger {
+  background-color: var(--accent-red);
+  color: #ffffff;
+  border: 1px solid var(--accent-red);
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+.btn-success {
+  background-color: var(--accent-green);
+  color: #ffffff;
+  border: 1px solid var(--accent-green);
+}
+
+.btn-success:hover {
+  background-color: #15803d;
+  border-color: #15803d;
+}
+
+.grid-2-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .grid-2-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feedback {
+  margin-top: 14px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  display: none;
+}
+
+.feedback:not(:empty) {
+  display: block;
+}
+
+.feedback.success, .feedback-success {
+  background-color: var(--accent-green-bg);
+  color: #14532d;
+  border: 1px solid #bbf7d0;
+}
+
+.feedback.error, .feedback-error {
+  background-color: var(--accent-red-bg);
+  color: #7f1d1d;
+  border: 1px solid #fecaca;
+}
+
+.item-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  margin-bottom: 20px;
+  transition: box-shadow 0.2s ease;
+}
+
+.item-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.item-card h4, .item-card h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.item-card p {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
