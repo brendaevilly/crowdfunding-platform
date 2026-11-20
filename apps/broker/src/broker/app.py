@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import RedirectResponse
 
 from broker.dispatcher import dispatch_pending
 from broker.dlq import router as dlq_router
+from broker.painel import router as painel_router
 from broker.publish import router as publish_router
 from broker.stats import router as stats_router
 from broker.subscriptions import router as subscriptions_router
@@ -77,3 +79,16 @@ app.include_router(subscriptions_router)
 app.include_router(publish_router)
 app.include_router(dlq_router)
 app.include_router(stats_router)
+app.include_router(painel_router)
+
+
+@app.get("/", include_in_schema=False)
+def root_broker(request: Request) -> Response:
+    """Redireciona navegador para o painel ou devolve JSON com metadados."""
+    if "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(url="/painel")
+
+    return Response(
+        content='{"service":"broker","version":"0.1.0","painel":"/painel"}',
+        media_type="application/json",
+    )

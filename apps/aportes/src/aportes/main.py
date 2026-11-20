@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from aportes.acl_kyc import consumir_identidade_verificada
 from aportes.api import criar_router
+from aportes.cliente_campanhas import ClienteCampanhas
 from aportes.reconciliacao_worker import executar_reconciliacao_periodica
 from aportes.repository import inicializar_banco
 from aportes.status_investidor import consumir_usuario_status_alterado
@@ -36,12 +37,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await tarefa
 
 
+cliente_campanhas = ClienteCampanhas()
+
 app = create_app(
     "aportes",
     lifespan=lifespan,
+    circuit_breakers={"campanhas": cliente_campanhas.circuit_breaker},
 )
 
-app.include_router(criar_router())
+app.include_router(criar_router(cliente_campanhas=cliente_campanhas))
 
 configure_messaging(
     app,
