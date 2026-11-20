@@ -47,6 +47,7 @@ def criar_campanhas_app(data_dir: str | Path = "data") -> FastAPI:
 
     rotas = criar_campanhas_router(data_dir)
     app.include_router(rotas)
+    app.include_router(rotas, prefix="/campanhas")
 
     @asynccontextmanager
     async def campanhas_lifespan(application: FastAPI) -> AsyncIterator[None]:

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Callable
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,97 @@ def inicializar_banco(data_dir: str | Path = "data") -> None:
     """Aplica migrations do serviço e instala tabelas de outbox e idempotência."""
     migrate(SERVICE, MIGRATIONS_DIR, data_dir)
     install_messaging_schema(SERVICE, data_dir)
+    if os.getenv("CAMPANHAS_SEED_DEMO", "false").lower() in ("true", "1", "yes"):
+        _seeder_campanhas_demo(data_dir)
+
+
+def _seeder_campanhas_demo(data_dir: str | Path = "data") -> None:
+    campanhas_demo = [
+        (
+            "campanha-horta-comunitaria",
+            "empreendedor-raizes",
+            "Horta comunitária do bairro",
+            (
+                "Cultivando alimentos e conexões locais com oficinas abertas e "
+                "agricultura ecológica sustentável."
+            ),
+            1200000,
+            845000,
+        ),
+        (
+            "campanha-oficina-jovens",
+            "empreendedor-futuro",
+            "Oficina criativa para jovens",
+            (
+                "Novas oportunidades por meio da arte, tecnologia e "
+                "capacitação profissional para a juventude."
+            ),
+            800000,
+            520000,
+        ),
+        (
+            "campanha-biblioteca-itinerante",
+            "empreendedor-paginas",
+            "Biblioteca itinerante",
+            (
+                "Livros circulando por toda a cidade, levando literatura, "
+                "oficinas de leitura e contação de histórias."
+            ),
+            1500000,
+            1130000,
+        ),
+        (
+            "campanha-reflorestamento-urbano",
+            "empreendedor-ecoacao",
+            "Corredor Verde Comunitário",
+            (
+                "Plantio de árvores nativas em áreas urbanas para redução de temperatura "
+                "e preservação da biodiversidade."
+            ),
+            2000000,
+            1420000,
+        ),
+        (
+            "campanha-maker-escola",
+            "empreendedor-educar",
+            "Laboratório Maker na Escola Pública",
+            (
+                "Robótica, programação e prototipagem para estimular a criatividade "
+                "e o raciocínio lógico dos alunos."
+            ),
+            2500000,
+            1875000,
+        ),
+    ]
+    agora = datetime.now(UTC)
+    inicio = agora - timedelta(days=5)
+    fim = agora + timedelta(days=30)
+
+    with closing(open_db(SERVICE, data_dir)) as conn:
+        for cid, emp_id, titulo, desc, meta, arrecadado in campanhas_demo:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO campanhas (
+                    id, empreendedor_id, titulo, descricao, meta,
+                    prazo_inicio, prazo_fim, status, valor_arrecadado,
+                    motivo_reprovacao, versao, criado_em, atualizado_em
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'PUBLICADA', ?, NULL, 1, ?, ?)
+                """,
+                (
+                    cid,
+                    emp_id,
+                    titulo,
+                    desc,
+                    meta,
+                    inicio.isoformat(),
+                    fim.isoformat(),
+                    arrecadado,
+                    inicio.isoformat(),
+                    agora.isoformat(),
+                ),
+            )
+        conn.commit()
 
 
 def obter_conexao_leitura(data_dir: str | Path = "data") -> sqlite3.Connection:

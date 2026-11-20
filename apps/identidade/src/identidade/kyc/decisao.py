@@ -41,6 +41,21 @@ def _decidir_na_transacao(
     verificacao = buscar_verificacao_pendente(conn, usuario_id)
 
     if verificacao is None:
+        from identidade.kyc.repositorio import listar_verificacoes_usuario
+        from identidade.kyc.servico import _criar_verificacao, processar_usuario_cadastrado
+
+        processar_usuario_cadastrado(conn, usuario_id)
+        verificacao = buscar_verificacao_pendente(conn, usuario_id)
+
+        if verificacao is None:
+            historico = listar_verificacoes_usuario(conn, usuario_id)
+            if historico and historico[0].status in (
+                StatusVerificacao.REPROVADA,
+                StatusVerificacao.EXPIRADA,
+            ):
+                verificacao = _criar_verificacao(conn, usuario_id)
+
+    if verificacao is None:
         raise DecisaoKycNaoPermitidaErro("Nenhuma verificação KYC PENDENTE encontrada")
 
     if tipo is not None and documento_hash is not None:

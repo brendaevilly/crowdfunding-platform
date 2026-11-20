@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Detalhes da Campanha — aporta.</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Header / Barra de Navegação -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <a href="/" class="logo-link">aporta<span>.</span></a>
+      </div>
+      <nav class="nav-links">
+        <a href="/" class="nav-link">Explorar</a>
+        <a href="/#como-funciona" class="nav-link">Como funciona</a>
+        <a href="/#sobre" class="nav-link">Sobre</a>
+      </nav>
+      <div id="header-auth-actions" class="header-actions">
+        <!-- Injetado dinamicamente -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal (02 - Detalhe da Campanha) -->
+  <main class="main-content">
+    <div id="global-alert" class="alert-box error hidden"></div>
+
+    <!-- Breadcrumbs -->
+    <nav class="breadcrumbs">
+      <a href="/">Explorar</a>
+      <span>/</span>
+      <span id="breadcrumb-category">Comunidade</span>
+      <span>/</span>
+      <span id="breadcrumb-title" style="color: var(--text-primary); font-weight: 600;">Horta comunitária</span>
+    </nav>
+
+    <!-- Layout 2 Colunas -->
+    <div class="campaign-detail-layout">
+      <!-- Coluna Principal (Esquerda) -->
+      <div class="detail-main-col">
+        <div class="detail-cover" id="detail-cover">
+          <div style="font-size: 3rem; color: #94a3b8;">🌱</div>
+        </div>
+
+        <div>
+          <span id="detail-category-badge" class="pill-tag">COMUNIDADE</span>
+        </div>
+
+        <h1 id="detail-title" class="detail-title">Horta comunitária do bairro</h1>
+        <p id="detail-lead" class="detail-lead">
+          Um espaço coletivo para cultivar alimentos, compartilhar conhecimento e fortalecer os laços da comunidade.
+        </p>
+
+        <!-- Autor / Organização -->
+        <div class="author-badge">
+          <div class="author-avatar" id="author-avatar">PR</div>
+          <div class="author-info">
+            <div class="author-name" id="author-name">Projeto Raízes</div>
+            <div class="author-role">Organização responsável</div>
+          </div>
+        </div>
+
+        <!-- Sobre o Projeto -->
+        <section class="detail-section">
+          <h2 class="detail-section-title">Sobre o projeto</h2>
+          <p id="detail-full-description" class="detail-section-content">
+            A proposta é transformar um terreno ocioso em uma horta comunitária, com oficinas abertas e produção compartilhada de alimentos orgânicos para os moradores locais.
+          </p>
+        </section>
+
+        <!-- Como os recursos serão utilizados -->
+        <section class="detail-section">
+          <h2 class="detail-section-title">Como os recursos serão utilizados</h2>
+          <ul class="funds-list" id="funds-list">
+            <li>Preparação do espaço e canteiros agroecológicos</li>
+            <li>Compra de ferramentas e sementes selecionadas</li>
+            <li>Oficinas de cultivo e capacitação para moradores</li>
+            <li>Sistema de captação e irrigação sustentável</li>
+          </ul>
+        </section>
+      </div>
+
+      <!-- Coluna Lateral (Sticky Invest Card) -->
+      <aside>
+        <div class="sticky-invest-card">
+          <div>
+            <div id="card-raised-amount" class="invest-card-raised">R$ 8.450</div>
+            <div id="card-goal-amount" class="invest-card-goal">arrecadados de R$ 12.000</div>
+          </div>
+
+          <!-- Barra de Progresso -->
+          <div class="progress-track" style="height: 10px;">
+            <div id="card-progress-bar" class="progress-fill" style="width: 70%;"></div>
+          </div>
+
+          <div class="invest-card-stats-row">
+            <span id="card-progress-percent">70% da meta</span>
+            <span id="card-days-left">12 dias restantes</span>
+          </div>
+
+          <hr style="border: 0; border-top: 1px solid var(--border-light); margin: 4px 0;">
+
+          <div>
+            <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 6px;">Faça parte dessa iniciativa</h3>
+            <p style="font-size: 0.95rem; color: var(--text-secondary);">
+              Escolha o valor do seu aporte e acompanhe a jornada do projeto.
+            </p>
+          </div>
+
+          <!-- Seleção rápida de valores -->
+          <div>
+            <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 8px;">
+              Valor do aporte
+            </label>
+            <div class="quick-amount-selector" id="detail-amount-pills">
+              <button class="amount-pill" data-amount="25">R$ 25</button>
+              <button class="amount-pill" data-amount="50">R$ 50</button>
+              <button class="amount-pill selected" data-amount="100">R$ 100</button>
+              <button class="amount-pill" data-amount="250">R$ 250</button>
+            </div>
+          </div>
+
+          <!-- Botão Principal CTA -->
+          <button id="btn-apoiar-projeto" class="btn btn-primary btn-block btn-lg" style="font-size: 1.15rem;">
+            Apoiar este projeto
+          </button>
+
+          <!-- Caixa de Informações de Custódia -->
+          <div class="custody-info-box">
+            <strong>Custódia do aporte</strong>
+            Seu valor fica sob custódia conforme as regras da campanha. As etapas e a liquidação só ocorrem mediante atingimento das metas estipuladas.
+          </div>
+
+          <div id="social-backers-count" style="font-size: 0.95rem; color: var(--text-muted); text-align: center; font-weight: 500;">
+            124 pessoas já apoiaram
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Rodapé -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-logo">aporta.</div>
+      <div class="footer-tagline">Transparência em cada etapa.</div>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initCampaignDetailPage();
+    });
+  </script>
+</body>
+</html>

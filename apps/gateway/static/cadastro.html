@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Criar Conta — aporta.</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body style="background-color: var(--bg-secondary);">
+  <!-- Header / Barra de Navegação Mínima -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <a href="/" class="logo-link">aporta<span>.</span></a>
+      </div>
+      <div>
+        <span style="font-size: 1.05rem; color: var(--text-muted); margin-right: 12px;">Já possui uma conta?</span>
+        <a href="/login.html" class="btn btn-secondary btn-sm">Entrar</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Container de Cadastro -->
+  <main class="main-content" style="display: flex; align-items: center; justify-content: center;">
+    <div class="auth-page-container">
+      <div class="auth-card">
+        <div class="auth-card-header">
+          <div class="auth-logo">aporta.</div>
+          <h1>Criar sua conta</h1>
+          <p>Preencha os dados abaixo para começar a apoiar projetos</p>
+        </div>
+
+        <!-- Alerta de Erro / Sucesso -->
+        <div id="cadastro-alert" class="alert-box error hidden"></div>
+
+        <form id="form-cadastro-standalone">
+          <div class="form-group">
+            <label for="cad-nome">Nome Completo</label>
+            <input type="text" id="cad-nome" class="form-control" required placeholder="Ex: Brenda Evilly" autocomplete="name">
+          </div>
+
+          <div class="form-group" style="margin-top: 16px;">
+            <label for="cad-email">E-mail</label>
+            <input type="email" id="cad-email" class="form-control" required placeholder="seu@email.com" autocomplete="email">
+          </div>
+
+          <div class="form-group" style="margin-top: 16px;">
+            <label for="cad-senha">Senha</label>
+            <input type="password" id="cad-senha" class="form-control" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+          </div>
+
+          <div class="form-group" style="margin-top: 16px;">
+            <label for="cad-perfil">Perfil</label>
+            <select id="cad-perfil" class="form-control">
+              <option value="INVESTIDOR" selected>Investidor (Apoiar projetos)</option>
+              <option value="EMPREENDEDOR">Empreendedor (Captar recursos)</option>
+            </select>
+          </div>
+
+          <button type="submit" id="btn-submit-cadastro" class="btn btn-primary btn-lg btn-block" style="margin-top: 24px;">
+            Criar minha conta
+          </button>
+        </form>
+
+        <div class="auth-footer-text">
+          Já possui conta cadastrada? <a href="/login.html">Fazer login</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Rodapé -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-logo">aporta.</div>
+      <div class="footer-tagline">Transparência em cada etapa.</div>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initCadastroPage();
+    });
+  </script>
+</body>
+</html>

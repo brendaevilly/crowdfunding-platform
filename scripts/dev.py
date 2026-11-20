@@ -84,11 +84,25 @@ def planejar_fases(nomes: list[str]) -> list[list[str]]:
     return [f for f in fases if f]
 
 
+def python_exec(raiz: Path = RAIZ) -> str:
+    """Retorna o executável Python do virtualenv local se existir, senão sys.executable."""
+    if sys.prefix != sys.base_prefix:
+        return sys.executable
+    venv_win = raiz / ".venv" / "Scripts" / "python.exe"
+    if sys.platform == "win32" and venv_win.is_file():
+        return str(venv_win)
+    venv_posix = raiz / ".venv" / "bin" / "python"
+    if venv_posix.is_file():
+        return str(venv_posix)
+    return sys.executable
+
+
 def comando_servico(nome: str, raiz: Path = RAIZ) -> list[str]:
     """`<app>.main` se o app tiver main.py; senão o placeholder (só /health)."""
+    py = python_exec(raiz)
     if (raiz / "apps" / nome / "src" / nome / "main.py").is_file():
-        return [sys.executable, "-m", f"{nome}.main"]
-    return [sys.executable, "-m", "shared.http.placeholder", nome]
+        return [py, "-m", f"{nome}.main"]
+    return [py, "-m", "shared.http.placeholder", nome]
 
 
 def proximo_backoff(atual: float) -> float:
@@ -192,6 +206,14 @@ class Launcher:
                 "anterior? Encerre-o e tente de novo."
             )
         env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+        venv_dir = RAIZ / ".venv"
+        if venv_dir.is_dir():
+            env["VIRTUAL_ENV"] = str(venv_dir)
+            scripts_dir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+            env["PATH"] = os.pathsep.join([str(scripts_dir), env.get("PATH", "")])
+        env.setdefault("IDENTIDADE_AUTO_ATIVAR", "true")
+        env.setdefault("KYC_HASH_SECRET", "segredo-kyc-hash-padrao-desenvolvimento-32b")
+        env.setdefault("CAMPANHAS_SEED_DEMO", "true")
         env["PYTHONPATH"] = os.pathsep.join(
             [str(RAIZ / "apps" / nome / "src"), *filter(None, [env.get("PYTHONPATH")])]
         )

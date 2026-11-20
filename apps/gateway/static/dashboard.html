@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meu Painel — aporta.</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Header / Barra de Navegação -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <a href="/" class="logo-link">aporta<span>.</span></a>
+      </div>
+      <nav class="nav-links">
+        <a href="/" class="nav-link">Explorar</a>
+        <a href="/dashboard.html" class="nav-link active">Meu Painel</a>
+        <a href="/#como-funciona" class="nav-link">Como funciona</a>
+      </nav>
+      <div id="header-auth-actions" class="header-actions">
+        <!-- Injetado dinamicamente -->
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div id="global-alert" class="alert-box error hidden"></div>
+
+    <div class="dashboard-header">
+      <h1 class="hero-title" style="font-size: 2.4rem;">Meu Painel de Investimentos</h1>
+      <p id="dashboard-user-greeting" class="section-subtitle">
+        Acompanhe seus aportes, participações, retornos e notificações em tempo real.
+      </p>
+    </div>
+
+    <!-- Grid do Dashboard -->
+    <div class="dashboard-grid">
+      <!-- Coluna Esquerda: Aportes e Participações -->
+      <div>
+        <!-- Card de Aportes -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-title">
+            <span>Meus Aportes</span>
+            <button id="btn-refresh-aportes" class="btn btn-secondary btn-sm">Atualizar</button>
+          </div>
+          <div id="table-aportes-container" style="overflow-x: auto;">
+            <p class="text-muted">Carregando aportes...</p>
+          </div>
+        </div>
+
+        <!-- Card de Participações e Retornos -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-title">
+            <span>Participações & Retornos</span>
+            <button id="btn-refresh-retornos" class="btn btn-secondary btn-sm">Atualizar</button>
+          </div>
+          <div id="table-retornos-container" style="overflow-x: auto;">
+            <p class="text-muted">Carregando participações e retornos...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna Direita: Status KYC & Notificações -->
+      <div>
+        <!-- Card de KYC -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-title">
+            <span>Identidade (KYC)</span>
+            <span id="kyc-badge" class="badge-status warning">Pendente</span>
+          </div>
+          <p style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 16px;">
+            A validação do documento é necessária para efetuar aportes com segurança jurídica.
+          </p>
+
+          <form id="form-dashboard-kyc">
+            <div class="form-group">
+              <label for="dash-kyc-tipo">Tipo de Documento</label>
+              <select id="dash-kyc-tipo" class="form-control">
+                <option value="CPF" selected>CPF</option>
+                <option value="RG">RG</option>
+                <option value="CNPJ">CNPJ</option>
+                <option value="PASSAPORTE">Passaporte</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+              <label for="dash-kyc-numero">Número do Documento</label>
+              <input type="text" id="dash-kyc-numero" class="form-control" required placeholder="000.000.000-00">
+            </div>
+            <button type="submit" id="btn-submit-kyc" class="btn btn-primary btn-block btn-sm" style="margin-top: 16px;">
+              Validar Documento
+            </button>
+          </form>
+          <div id="kyc-feedback" style="margin-top: 12px; font-size: 0.95rem;"></div>
+        </div>
+
+        <!-- Card de Notificações -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-title">
+            <span>Notificações</span>
+            <button id="btn-refresh-notificacoes" class="btn btn-secondary btn-sm">Atualizar</button>
+          </div>
+          <div id="notifications-list-container">
+            <p class="text-muted">Nenhuma notificação encontrada.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Rodapé -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-logo">aporta.</div>
+      <div class="footer-tagline">Transparência em cada etapa.</div>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initDashboardPage();
+    });
+  </script>
+</body>
+</html>

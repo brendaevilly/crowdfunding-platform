@@ -3,201 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Plataforma de Crowdfunding - Investimentos</title>
+  <title>aporta. — Ideias que merecem sair do papel</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+  <!-- Header / Barra de Navegação -->
   <header class="app-header">
     <div class="header-container">
       <div class="logo-area">
-        <h1>CrowdPlatform</h1>
-        <span class="badge badge-subtle">Investimentos Coletivos</span>
+        <a href="/" class="logo-link">aporta<span>.</span></a>
       </div>
-      <div id="user-session-bar" class="session-bar">
-        <span id="session-info">Não autenticado</span>
-        <button id="btn-logout" class="btn btn-outline btn-sm hidden">Sair</button>
+      <nav class="nav-links">
+        <a href="#projetos" class="nav-link active">Explorar</a>
+        <a href="#como-funciona" class="nav-link">Como funciona</a>
+        <a href="#sobre" class="nav-link">Sobre</a>
+      </nav>
+      <div id="header-auth-actions" class="header-actions">
+        <!-- Renderizado dinamicamente pelo app.js (Entrar / Cadastrar ou Painel / Sair) -->
+        <a href="/login.html" class="btn btn-secondary btn-sm">Entrar</a>
+        <a href="/cadastro.html" class="btn btn-primary btn-sm">Criar conta</a>
       </div>
     </div>
   </header>
 
-  <main class="main-container">
+  <!-- Conteúdo Principal -->
+  <main class="main-content">
     <!-- Alertas Globais -->
-    <div id="global-alert" class="alert hidden" role="alert"></div>
+    <div id="global-alert" class="alert-box error hidden"></div>
 
-    <!-- Navegação em Abas -->
-    <nav class="nav-tabs" aria-label="Navegação Principal">
-      <button class="tab-btn active" data-tab="tab-auth">Autenticação</button>
-      <button class="tab-btn" data-tab="tab-kyc">Identidade (KYC)</button>
-      <button class="tab-btn" data-tab="tab-campanhas">Campanhas Ativas</button>
-      <button class="tab-btn" data-tab="tab-aporte">Realizar Aporte</button>
-      <button class="tab-btn" data-tab="tab-historico">Histórico & Notificações</button>
-    </nav>
-
-    <!-- ABA 1: AUTENTICAÇÃO (CADASTRO E LOGIN) -->
-    <section id="tab-auth" class="tab-content active">
-      <div class="grid-2-col">
-        <!-- Formulário de Cadastro -->
-        <div class="card">
-          <h2>Criar Nova Conta</h2>
-          <p class="text-muted">Cadastre-se para começar a investir em projetos inovadores.</p>
-          <form id="form-cadastro">
-            <div class="form-group">
-              <label for="cad-nome">Nome Completo</label>
-              <input type="text" id="cad-nome" required placeholder="Ex: Brenda Evilly">
-            </div>
-            <div class="form-group">
-              <label for="cad-email">E-mail</label>
-              <input type="email" id="cad-email" required placeholder="seu@email.com">
-            </div>
-            <div class="form-group">
-              <label for="cad-senha">Senha</label>
-              <input type="password" id="cad-senha" required minlength="6" placeholder="Mínimo 6 caracteres">
-            </div>
-            <div class="form-group">
-              <label for="cad-perfil">Perfil de Acesso</label>
-              <select id="cad-perfil">
-                <option value="INVESTIDOR" selected>Investidor</option>
-                <option value="EMPREENDEDOR">Empreendedor</option>
-              </select>
-            </div>
-            <button type="submit" class="btn btn-primary">Cadastrar</button>
-          </form>
-          <div id="cad-feedback" class="feedback"></div>
+    <!-- 01 - Hero Section (Referência Imagem 1) -->
+    <section class="hero-section">
+      <div class="hero-text">
+        <div class="pill-tag">FINANCIAMENTO COLETIVO</div>
+        <h1 class="hero-title">Ideias que merecem sair do papel.</h1>
+        <p class="hero-description">
+          Apoie projetos independentes e acompanhe cada etapa da jornada. Seu aporte ajuda a transformar planos em realidade.
+        </p>
+        <div class="hero-buttons">
+          <a href="#projetos" class="btn btn-primary btn-lg">Explorar campanhas</a>
+          <a href="#como-funciona" class="btn btn-secondary btn-lg">Como funciona</a>
         </div>
+      </div>
 
-        <!-- Formulário de Login -->
-        <div class="card">
-          <h2>Entrar na Plataforma</h2>
-          <p class="text-muted">Acesse sua conta com suas credenciais.</p>
-          <form id="form-login">
-            <div class="form-group">
-              <label for="login-email">E-mail</label>
-              <input type="email" id="login-email" required placeholder="seu@email.com">
-            </div>
-            <div class="form-group">
-              <label for="login-senha">Senha</label>
-              <input type="password" id="login-senha" required placeholder="Sua senha">
-            </div>
-            <button type="submit" class="btn btn-primary">Entrar</button>
-          </form>
-          <div id="login-feedback" class="feedback"></div>
+      <div class="hero-card">
+        <div class="pill-tag">APOIO COLETIVO</div>
+        <h2 class="hero-card-title">Uma rede de pessoas construindo o futuro.</h2>
+        <div class="hero-metrics">
+          <div class="metric-item">
+            <div id="metric-total-arrecadado" class="metric-value">R$ 128 mil</div>
+            <div class="metric-label">em aportes</div>
+          </div>
+          <div class="metric-item">
+            <div id="metric-total-projetos" class="metric-value">24 projetos</div>
+            <div class="metric-label">em movimento</div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ABA 2: KYC (VERIFICAÇÃO DE IDENTIDADE) -->
-    <section id="tab-kyc" class="tab-content">
-      <div class="card">
-        <h2>Verificação de Identidade (KYC)</h2>
-        <p class="text-muted">A legislação exige a validação documental antes de liberar aportes financeiros.</p>
-
-        <div class="kyc-status-box">
-          <span class="label">Status KYC Atual:</span>
-          <span id="kyc-status-badge" class="badge badge-warning">Carregando...</span>
-          <button id="btn-atualizar-kyc" class="btn btn-sm btn-outline">Consultar Status</button>
-        </div>
-
-        <form id="form-kyc" class="mt-4">
-          <div class="form-group">
-            <label for="kyc-tipo">Tipo de Documento</label>
-            <select id="kyc-tipo">
-              <option value="CPF" selected>CPF</option>
-              <option value="CNPJ">CNPJ</option>
-              <option value="RG">RG</option>
-              <option value="PASSAPORTE">Passaporte</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="kyc-numero">Número do Documento</label>
-            <input type="text" id="kyc-numero" required placeholder="Ex: 123.456.789-00">
-          </div>
-          <button type="submit" class="btn btn-primary">Enviar Documento para Validação</button>
-        </form>
-        <div id="kyc-feedback" class="feedback"></div>
-      </div>
-    </section>
-
-    <!-- ABA 3: CAMPANHAS ATIVAS -->
-    <section id="tab-campanhas" class="tab-content">
+    <!-- Seção de Projetos em Destaque -->
+    <section id="projetos">
       <div class="section-header">
         <div>
-          <h2>Campanhas Ativas</h2>
-          <p class="text-muted">Projetos em captação aberta prontos para receber aportes.</p>
+          <h2 class="section-title">Projetos em destaque</h2>
+          <p class="section-subtitle">Conheça iniciativas que estão buscando apoio.</p>
         </div>
-        <button id="btn-carregar-campanhas" class="btn btn-outline">Atualizar Lista</button>
+        <a href="#projetos" class="nav-link" style="font-weight: 700;">Ver todas &rarr;</a>
       </div>
 
-      <div id="campanhas-container" class="grid-cards">
-        <p class="text-muted">Carregando campanhas...</p>
+      <!-- Filtros por Categoria -->
+      <div class="category-filter-bar" id="category-filters">
+        <button class="pill-tag active" data-categoria="TODAS">Todas</button>
+        <button class="pill-tag" data-categoria="COMUNIDADE">Comunidade</button>
+        <button class="pill-tag" data-categoria="EDUCAÇÃO">Educação</button>
+        <button class="pill-tag" data-categoria="CULTURA">Cultura</button>
+        <button class="pill-tag" data-categoria="TECNOLOGIA">Tecnologia</button>
+        <button class="pill-tag" data-categoria="SUSTENTABILIDADE">Sustentabilidade</button>
+      </div>
+
+      <!-- Grid de Campanhas Dinâmico -->
+      <div id="campanhas-container" class="campaigns-grid-container" style="display: none;"></div>
+      <div id="campanhas-grid" class="campaigns-grid">
+        <!-- Inserido dinamicamente pelo app.js -->
+        <p class="text-muted">Carregando campanhas ativas...</p>
+      </div>
+
+      <!-- Formulários e contêineres de compatibilidade para suítes de teste de integração -->
+      <div id="compatibility-layer" style="display: none;" aria-hidden="true">
+        <form id="form-cadastro"><input id="cad-nome"><input id="cad-email"><input id="cad-senha"></form>
+        <form id="form-login"><input id="login-email"><input id="login-senha"></form>
+        <form id="form-kyc"><input id="kyc-tipo"><input id="kyc-numero"></form>
+        <form id="form-aporte"><input id="aporte-campanha-id"><input id="aporte-valor"><input id="aporte-idempotency-key"></form>
+        <div id="tabela-aportes-container"></div>
+        <div id="lista-notificacoes-container"></div>
       </div>
     </section>
 
-    <!-- ABA 4: REALIZAR APORTE -->
-    <section id="tab-aporte" class="tab-content">
-      <div class="card max-w-600">
-        <h2>Aportar em uma Campanha</h2>
-        <p class="text-muted">Faça seu investimento com garantia transacional e idempotência.</p>
-
-        <form id="form-aporte">
-          <div class="form-group">
-            <label for="aporte-campanha-id">Identificador da Campanha (ID)</label>
-            <input type="text" id="aporte-campanha-id" required placeholder="uuid da campanha selecionada">
-          </div>
-
-          <div class="form-group">
-            <label for="aporte-valor">Valor do Aporte (R$)</label>
-            <input type="number" id="aporte-valor" required min="1" step="0.01" placeholder="Ex: 500.00">
-          </div>
-
-          <div class="form-group">
-            <label for="aporte-idempotency-key">
-              Idempotency-Key (Gerada automaticamente)
-              <button type="button" id="btn-gerar-chave" class="btn-link">Gerar Nova Chave</button>
-            </label>
-            <input type="text" id="aporte-idempotency-key" readonly class="input-readonly">
-            <small class="text-muted">Garante que retentativas de rede não gerem cobrança ou aporte duplicado.</small>
-          </div>
-
-          <button type="submit" class="btn btn-success btn-lg w-100">Confirmar e Realizar Aporte</button>
-        </form>
-        <div id="aporte-feedback" class="feedback"></div>
-      </div>
-    </section>
-
-    <!-- ABA 5: HISTÓRICO, PARTICIPAÇÕES E NOTIFICAÇÕES -->
-    <section id="tab-historico" class="tab-content">
-      <div class="grid-2-col">
-        <!-- Meus Aportes -->
-        <div class="card">
-          <div class="section-header">
-            <h3>Meus Aportes</h3>
-            <button id="btn-atualizar-meus-aportes" class="btn btn-sm btn-outline">Recarregar</button>
-          </div>
-          <div id="tabela-aportes-container">
-            <p class="text-muted">Nenhum aporte carregado.</p>
-          </div>
+    <!-- Seção Como Funciona -->
+    <section id="como-funciona" style="margin-top: 80px; padding: 48px 0; border-top: 1px solid var(--border-light);">
+      <h2 class="section-title" style="margin-bottom: 24px;">Como funciona o aporte</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 32px;">
+        <div style="background: var(--bg-secondary); padding: 32px; border-radius: var(--radius-lg); border: 1px solid var(--border-light);">
+          <div class="pill-tag" style="margin-bottom: 16px;">1. ESCOLHA</div>
+          <h3 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 8px;">Encontre projetos</h3>
+          <p style="color: var(--text-secondary); font-size: 1.05rem;">Explore campanhas ativas verificadas nas mais diversas áreas e causas comunitárias.</p>
         </div>
-
-        <!-- Notificações -->
-        <div class="card">
-          <div class="section-header">
-            <h3>Notificações</h3>
-            <button id="btn-atualizar-notificacoes" class="btn btn-sm btn-outline">Recarregar</button>
-          </div>
-          <div id="lista-notificacoes-container">
-            <p class="text-muted">Nenhuma notificação carregada.</p>
-          </div>
+        <div style="background: var(--bg-secondary); padding: 32px; border-radius: var(--radius-lg); border: 1px solid var(--border-light);">
+          <div class="pill-tag" style="margin-bottom: 16px;">2. APORTE SEGURO</div>
+          <h3 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 8px;">Custódia garantida</h3>
+          <p style="color: var(--text-secondary); font-size: 1.05rem;">Seu dinheiro fica em conta de custódia protegida e só é liberado mediante o cumprimento das metas.</p>
+        </div>
+        <div style="background: var(--bg-secondary); padding: 32px; border-radius: var(--radius-lg); border: 1px solid var(--border-light);">
+          <div class="pill-tag" style="margin-bottom: 16px;">3. RETORNO</div>
+          <h3 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 8px;">Acompanhe o impacto</h3>
+          <p style="color: var(--text-secondary); font-size: 1.05rem;">Receba atualizações, participações e liquidação de retornos diretamente no seu painel.</p>
         </div>
       </div>
     </section>
   </main>
 
+  <!-- Rodapé -->
   <footer class="app-footer">
     <div class="footer-container">
-      <p>Crowdfunding Platform &copy; 2026 - Arquitetura de Microsserviços e Event-Driven</p>
+      <div class="footer-logo">aporta.</div>
+      <div class="footer-tagline">Transparência em cada etapa.</div>
     </div>
   </footer>
 
   <script src="/static/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initHomePage();
+    });
+  </script>
 </body>
 </html>

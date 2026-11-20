@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Realizar Aporte — aporta.</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Header / Barra de Navegação -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <a href="/" class="logo-link">aporta<span>.</span></a>
+      </div>
+      <nav class="nav-links">
+        <a href="/" class="nav-link">Explorar</a>
+        <a href="/#como-funciona" class="nav-link">Como funciona</a>
+        <a href="/#sobre" class="nav-link">Sobre</a>
+      </nav>
+      <div id="header-auth-actions" class="header-actions">
+        <!-- Injetado dinamicamente -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal (03 - Realizar Aporte) -->
+  <main class="main-content">
+    <div class="checkout-container">
+      <a href="/" id="back-to-campaign-link" class="back-link">&larr; Voltar para a campanha</a>
+
+      <div class="checkout-header">
+        <h1>Contribua com o projeto</h1>
+        <p id="checkout-campaign-title">Horta comunitária do bairro</p>
+      </div>
+
+      <!-- Barra de Etapas (Stepper) -->
+      <div class="stepper-bar">
+        <div id="step-node-1" class="step-node active">1 Valor</div>
+        <div id="step-node-2" class="step-node">2 Identificação</div>
+        <div id="step-node-3" class="step-node">3 Revisão</div>
+      </div>
+
+      <!-- Alertas da Página -->
+      <div id="checkout-alert" class="alert-box error hidden"></div>
+
+      <!-- ETAPA 1: VALOR -->
+      <div id="checkout-step-1" class="step-card">
+        <h2>Quanto deseja aportar?</h2>
+        <p class="subtitle">Selecione um valor ou informe outro montante.</p>
+
+        <!-- Quick Pills -->
+        <div class="quick-amount-selector" id="checkout-amount-pills">
+          <button type="button" class="amount-pill" data-amount="25">R$ 25</button>
+          <button type="button" class="amount-pill" data-amount="50">R$ 50</button>
+          <button type="button" class="amount-pill selected" data-amount="100">R$ 100</button>
+          <button type="button" class="amount-pill" data-amount="custom">Outro valor</button>
+        </div>
+
+        <!-- Input de Moeda com valor personalizado -->
+        <div class="amount-input-box">
+          <label for="input-custom-amount">Valor personalizado</label>
+          <div class="currency-input-wrapper">
+            <span class="currency-symbol">R$</span>
+            <input type="number" id="input-custom-amount" class="currency-input" value="100.00" min="1" step="0.01">
+          </div>
+        </div>
+
+        <!-- Resumo Breakdown -->
+        <div class="summary-breakdown">
+          <div class="breakdown-row">
+            <span>Valor do aporte</span>
+            <span id="breakdown-aporte-val">R$ 100,00</span>
+          </div>
+          <div class="breakdown-row total">
+            <span>Total</span>
+            <span id="breakdown-total-val">R$ 100,00</span>
+          </div>
+        </div>
+
+        <button type="button" id="btn-next-step-1" class="btn btn-primary btn-lg btn-block">
+          Continuar
+        </button>
+        <p style="text-align: center; font-size: 0.95rem; color: var(--text-muted);">
+          Você poderá revisar os dados antes de confirmar.
+        </p>
+      </div>
+
+      <!-- ETAPA 2: IDENTIFICAÇÃO / KYC -->
+      <div id="checkout-step-2" class="step-card" style="display: none;">
+        <h2>Identificação do Investidor</h2>
+        <p class="subtitle">Aportes exigem conta autenticada e conformidade cadastral (KYC).</p>
+
+        <div id="auth-status-panel">
+          <!-- Preenchido pelo app.js dependendo se usuário está logado e se KYC está aprovado -->
+        </div>
+
+        <div style="display: flex; gap: 16px; margin-top: 16px;">
+          <button type="button" id="btn-back-step-2" class="btn btn-secondary btn-lg" style="flex: 1;">
+            Voltar
+          </button>
+          <button type="button" id="btn-next-step-2" class="btn btn-primary btn-lg" style="flex: 1;">
+            Avançar para Revisão
+          </button>
+        </div>
+      </div>
+
+      <!-- ETAPA 3: REVISÃO E CONFIRMAÇÃO -->
+      <div id="checkout-step-3" class="step-card" style="display: none;">
+        <h2>Revisão e Confirmação</h2>
+        <p class="subtitle">Confira os dados do seu aporte antes de efetivar o pagamento.</p>
+
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+          <div class="breakdown-row">
+            <span style="color: var(--text-muted);">Campanha:</span>
+            <strong id="review-campaign-name">Horta comunitária do bairro</strong>
+          </div>
+          <div class="breakdown-row">
+            <span style="color: var(--text-muted);">Investidor:</span>
+            <strong id="review-investor-name">Brenda Evilly</strong>
+          </div>
+          <div class="breakdown-row">
+            <span style="color: var(--text-muted);">Status KYC:</span>
+            <span class="badge-status success">Verificado</span>
+          </div>
+          <div class="breakdown-row total" style="margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border-light);">
+            <span>Valor Total:</span>
+            <span id="review-final-amount">R$ 100,00</span>
+          </div>
+        </div>
+
+        <!-- Idempotency-Key -->
+        <div style="margin-top: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <label style="font-size: 0.95rem; font-weight: 600; color: var(--text-secondary);">
+              Chave de Idempotência (Idempotency-Key)
+            </label>
+            <button type="button" id="btn-renew-idempotency" style="background: none; border: none; font-size: 0.85rem; color: var(--btn-primary-bg); cursor: pointer; text-decoration: underline;">
+              Gerar nova
+            </button>
+          </div>
+          <input type="text" id="review-idempotency-key" readonly class="form-control" style="background: var(--bg-subtle); font-family: monospace; font-size: 0.95rem;">
+          <small style="color: var(--text-muted); font-size: 0.85rem; display: block; margin-top: 4px;">
+            Proteção garantida: impede cobranças ou aportes duplicados em oscilações de conexão.
+          </small>
+        </div>
+
+        <div style="display: flex; gap: 16px; margin-top: 16px;">
+          <button type="button" id="btn-back-step-3" class="btn btn-secondary btn-lg" style="flex: 1;">
+            Voltar
+          </button>
+          <button type="button" id="btn-confirm-aporte" class="btn btn-primary btn-lg" style="flex: 2;">
+            Confirmar e Realizar Aporte
+          </button>
+        </div>
+      </div>
+
+      <!-- ETAPA SUCESSO -->
+      <div id="checkout-step-success" class="step-card" style="display: none; text-align: center;">
+        <div style="font-size: 3.5rem; color: var(--accent-green); margin-bottom: 12px;">✓</div>
+        <h2 style="font-size: 2rem;">Aporte realizado com sucesso!</h2>
+        <p style="font-size: 1.15rem; color: var(--text-secondary); max-width: 480px; margin: 12px auto 24px;">
+          Seu investimento foi registrado no livro-caixa sob custódia e você já pode acompanhar o andamento no seu painel.
+        </p>
+
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 20px; max-width: 420px; margin: 0 auto 32px; text-align: left;">
+          <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 4px;">Identificador do Aporte:</div>
+          <code id="success-aporte-id" style="font-weight: 700; color: var(--text-primary); font-size: 1rem;">-</code>
+        </div>
+
+        <div style="display: flex; justify-content: center; gap: 16px;">
+          <a href="/dashboard.html" class="btn btn-primary btn-lg">Ir para Meu Painel</a>
+          <a href="/" class="btn btn-secondary btn-lg">Explorar mais projetos</a>
+        </div>
+      </div>
+
+      <!-- Caixa Explicativa de Custódia (Referência Imagem 3) -->
+      <div class="custody-info-box" style="margin-top: 32px;">
+        <strong style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.1rem;">ℹ</span> Como funciona a custódia?
+        </strong>
+        O aporte é registrado e acompanhado durante o ciclo da campanha, conforme as condições informadas pelo empreendedor. O recurso fica retido com segurança até que a meta mínima seja atingida.
+      </div>
+    </div>
+  </main>
+
+  <!-- Rodapé -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-logo">aporta.</div>
+      <div class="footer-tagline">Transparência em cada etapa.</div>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      initCheckoutPage();
+    });
+  </script>
+</body>
+</html>
