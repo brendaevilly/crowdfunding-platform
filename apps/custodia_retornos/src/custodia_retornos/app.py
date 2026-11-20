@@ -10,11 +10,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from contracts.topicos import (
     APORTE_CONFIRMADO,
+    CAMPANHA_LIQUIDADA,
     CAMPANHA_PUBLICADA,
     RESULTADO_CAMPANHA,
 )
@@ -28,6 +29,11 @@ from custodia_retornos.custodia.consumidores import (
 )
 from custodia_retornos.custodia.repositorio import listar_movimentacoes
 from custodia_retornos.custodia.scheduler import executar_scheduler
+from custodia_retornos.retornos.servico import (
+    consumir_campanha_liquidada,
+    listar_participacoes_investidor,
+)
+from shared.auth import TokenInvalido, segredo_do_ambiente, validar_token
 from shared.consumer import EventHandler
 from shared.db import migrate, transaction
 from shared.http.app import create_app
@@ -42,6 +48,7 @@ HANDLERS: dict[str, EventHandler] = {
     CAMPANHA_PUBLICADA: consumir_campanha_publicada,
     APORTE_CONFIRMADO: consumir_aporte_confirmado,
     RESULTADO_CAMPANHA: consumir_resultado_campanha,
+    CAMPANHA_LIQUIDADA: consumir_campanha_liquidada,
 }
 
 
@@ -148,6 +155,51 @@ def criar_custodia_app(
 
         return transaction(
             consultar,
+            "custodia_retornos",
+            data_dir,
+        )
+
+    @app.get("/retornos/minhas-participacoes")
+    def minhas_participacoes(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> list[dict[str, object]]:
+        """Lista as participações do investidor autenticado."""
+
+        if authorization is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação obrigatório.",
+            )
+
+        esquema, _, token = authorization.partition(" ")
+
+        if esquema.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido.",
+            )
+
+        segredo, _ = segredo_do_ambiente()
+
+        try:
+            claims = validar_token(token.strip(), segredo=segredo)
+        except TokenInvalido as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido ou expirado.",
+            ) from exc
+
+        if claims.perfil != "INVESTIDOR":
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso permitido apenas para investidores.",
+            )
+
+        return transaction(
+            lambda conn: listar_participacoes_investidor(
+                conn,
+                claims.sub,
+            ),
             "custodia_retornos",
             data_dir,
         )

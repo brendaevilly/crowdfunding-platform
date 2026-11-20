@@ -86,6 +86,26 @@ def consumir_aporte_confirmado(
         (evento.aporte_id, evento.campanha_id),
     ).fetchone()
 
+    # Registra os dados necessários para calcular a participação
+    # do investidor na campanha, independentemente de reentregas.
+    conn.execute(
+        """
+        INSERT INTO retornos_aportes (
+            aporte_id, campanha_id, investidor_id,
+            valor, confirmado_em
+        )
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(aporte_id) DO NOTHING
+        """,
+        (
+            evento.aporte_id,
+            evento.campanha_id,
+            evento.investidor_id,
+            evento.valor,
+            evento.confirmado_em.isoformat(),
+        ),
+    )
+
     if retencao_existente is not None:
         logger.info(
             "Aporte %s já registrado; evento duplicado ignorado.",

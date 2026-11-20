@@ -456,3 +456,143 @@ def test_resultado_falha_devolve_aportes_via_http(
     ]
     assert liquidacoes is not None and liquidacoes[0] == 1
     assert eventos is not None and eventos[0] == 0
+
+
+def criar_token_investidor(investidor_id: str, perfil: str = "INVESTIDOR") -> str:
+    """Gera JWT válido para os testes de participações."""
+    from shared.auth import emitir_token, segredo_do_ambiente
+
+    segredo, _ = segredo_do_ambiente()
+
+    return emitir_token(
+        sub=investidor_id,
+        perfil=perfil,
+        segredo=segredo,
+    )
+
+
+def test_minhas_participacoes_retorna_apenas_do_investidor(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Cada investidor consulta somente suas próprias participações."""
+    from contracts.topicos import CAMPANHA_LIQUIDADA
+
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        campanha = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-participacoes",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+        assert campanha.status_code == 200
+
+        aportes = [
+            ("aporte-a", "investidor-A", 6000),
+            ("aporte-b", "investidor-B", 4000),
+        ]
+
+        for aporte_id, investidor_id, valor in aportes:
+            resposta = client.post(
+                "/events",
+                json=criar_entrega(
+                    f"evento-{aporte_id}",
+                    APORTE_CONFIRMADO,
+                    {
+                        "aporteId": aporte_id,
+                        "campanhaId": "campanha-1",
+                        "investidorId": investidor_id,
+                        "valor": valor,
+                        "confirmadoEm": datetime.now(UTC).isoformat(),
+                    },
+                ),
+            )
+            assert resposta.status_code == 200
+
+        liquidacao = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-liquidacao-participacoes",
+                CAMPANHA_LIQUIDADA,
+                {
+                    "campanhaId": "campanha-1",
+                    "valorBruto": 10000,
+                    "taxaPlataforma": 0,
+                    "valorLiquido": 10000,
+                    "liquidadaEm": datetime.now(UTC).isoformat(),
+                    "aportes": ["aporte-a", "aporte-b"],
+                },
+            ),
+        )
+        assert liquidacao.status_code == 200
+
+        token_a = criar_token_investidor("investidor-A")
+        token_b = criar_token_investidor("investidor-B")
+
+        resposta_a = client.get(
+            "/retornos/minhas-participacoes",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+        resposta_b = client.get(
+            "/retornos/minhas-participacoes",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+
+    assert resposta_a.status_code == 200
+    assert resposta_b.status_code == 200
+
+    dados_a = resposta_a.json()
+    dados_b = resposta_b.json()
+
+    assert len(dados_a) == 1
+    assert len(dados_b) == 1
+
+    assert dados_a[0]["valorAportado"] == 6000
+    assert dados_a[0]["percentual"] == "0.6000"
+
+    assert dados_b[0]["valorAportado"] == 4000
+    assert dados_b[0]["percentual"] == "0.4000"
+
+
+def test_minhas_participacoes_sem_token_retorna_401(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        resposta = client.get("/retornos/minhas-participacoes")
+
+    assert resposta.status_code == 401
+
+
+def test_minhas_participacoes_com_token_invalido_retorna_401(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        resposta = client.get(
+            "/retornos/minhas-participacoes",
+            headers={"Authorization": "Bearer token-invalido"},
+        )
+
+    assert resposta.status_code == 401
+
+
+def test_minhas_participacoes_usuario_nao_investidor_retorna_403(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    token = criar_token_investidor(
+        "empreendedor-1",
+        perfil="EMPREENDEDOR",
+    )
+
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        resposta = client.get(
+            "/retornos/minhas-participacoes",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert resposta.status_code == 403
