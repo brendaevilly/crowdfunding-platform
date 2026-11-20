@@ -33,6 +33,10 @@ from custodia_retornos.retornos.servico import (
     consumir_campanha_liquidada,
     listar_participacoes_investidor,
 )
+from custodia_retornos.retornos.servico_distribuicao import (
+    distribuir_retornos,
+    listar_extrato_investidor,
+)
 from shared.auth import TokenInvalido, segredo_do_ambiente, validar_token
 from shared.consumer import EventHandler
 from shared.db import migrate, transaction
@@ -50,6 +54,10 @@ HANDLERS: dict[str, EventHandler] = {
     RESULTADO_CAMPANHA: consumir_resultado_campanha,
     CAMPANHA_LIQUIDADA: consumir_campanha_liquidada,
 }
+
+
+class DistribuirRetornosRequest(BaseModel):
+    valor_total: int = Field(gt=0, alias="valorTotal")
 
 
 class ClockAdvanceRequest(BaseModel):
@@ -200,6 +208,115 @@ def criar_custodia_app(
                 conn,
                 claims.sub,
             ),
+            "custodia_retornos",
+            data_dir,
+        )
+
+    @app.post("/retornos/campanhas/{campanha_id}/distribuir")
+    def distribuir_retornos_http(
+        campanha_id: str,
+        payload: DistribuirRetornosRequest,
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> dict[str, object]:
+        """Distribui retornos somente pelo empreendedor proprietário."""
+
+        if authorization is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação obrigatório.",
+            )
+
+        esquema, _, token = authorization.partition(" ")
+
+        if esquema.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido.",
+            )
+
+        segredo, _ = segredo_do_ambiente()
+
+        try:
+            claims = validar_token(token.strip(), segredo=segredo)
+        except TokenInvalido as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido ou expirado.",
+            ) from exc
+
+        if claims.perfil != "EMPREENDEDOR":
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso permitido apenas para empreendedores.",
+            )
+
+        try:
+            distribuicoes = transaction(
+                lambda conn: distribuir_retornos(
+                    conn,
+                    campanha_id,
+                    claims.sub,
+                    payload.valor_total,
+                ),
+                "custodia_retornos",
+                data_dir,
+            )
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail=str(exc),
+            ) from exc
+        except ValueError as exc:
+            codigo = 404 if str(exc) == "Campanha não encontrada" else 400
+            raise HTTPException(
+                status_code=codigo,
+                detail=str(exc),
+            ) from exc
+
+        return {
+            "campanhaId": campanha_id,
+            "valorTotal": payload.valor_total,
+            "distribuicoes": distribuicoes,
+        }
+
+    @app.get("/retornos/extrato")
+    def extrato_retornos_http(
+        authorization: str | None = Header(default=None, alias="Authorization"),
+    ) -> list[dict[str, object]]:
+        """Lista os retornos recebidos pelo investidor autenticado."""
+
+        if authorization is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação obrigatório.",
+            )
+
+        esquema, _, token = authorization.partition(" ")
+
+        if esquema.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido.",
+            )
+
+        segredo, _ = segredo_do_ambiente()
+
+        try:
+            claims = validar_token(token.strip(), segredo=segredo)
+        except TokenInvalido as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Token de autenticação inválido ou expirado.",
+            ) from exc
+
+        if claims.perfil != "INVESTIDOR":
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso permitido apenas para investidores.",
+            )
+
+        return transaction(
+            lambda conn: listar_extrato_investidor(conn, claims.sub),
             "custodia_retornos",
             data_dir,
         )

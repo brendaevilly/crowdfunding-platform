@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 import custodia_retornos.app as modulo_app
@@ -596,3 +598,304 @@ def test_minhas_participacoes_usuario_nao_investidor_retorna_403(
         )
 
     assert resposta.status_code == 403
+
+
+def test_distribuicao_proporcional_via_http(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Distribui retornos proporcionalmente e disponibiliza o extrato."""
+    from contracts.topicos import CAMPANHA_LIQUIDADA, RESULTADO_CAMPANHA
+    from shared.db import open_db
+
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        # Publicar campanha.
+        resposta = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-distribuicao",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+        assert resposta.status_code == 200
+
+        # Registrar aportes dos dois investidores.
+        for aporte_id, investidor_id, valor in [
+            ("aporte-dist-a", "investidor-A", 6000),
+            ("aporte-dist-b", "investidor-B", 4000),
+        ]:
+            resposta = client.post(
+                "/events",
+                json=criar_entrega(
+                    f"evento-{aporte_id}",
+                    APORTE_CONFIRMADO,
+                    {
+                        "aporteId": aporte_id,
+                        "campanhaId": "campanha-1",
+                        "investidorId": investidor_id,
+                        "valor": valor,
+                        "confirmadoEm": datetime.now(UTC).isoformat(),
+                    },
+                ),
+            )
+            assert resposta.status_code == 200
+
+        # Simula o resultado persistido pela apuração da Issue #26.
+        with open_db("custodia_retornos", tmp_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO custodia_resultados (
+                    campanha_id, resultado, valor_arrecadado, encerrada_em
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "campanha-1",
+                    "SUCESSO",
+                    10000,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+        # Registrar resultado de sucesso.
+        resposta = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-resultado-distribuicao",
+                RESULTADO_CAMPANHA,
+                {
+                    "campanhaId": "campanha-1",
+                    "empreendedorId": "empreendedor-1",
+                    "resultado": "SUCESSO",
+                    "valorArrecadado": 10000,
+                    "investidorIds": ["investidor-A", "investidor-B"],
+                    "encerradaEm": datetime.now(UTC).isoformat(),
+                },
+            ),
+        )
+        assert resposta.status_code == 200
+
+        # Criar participações a partir da liquidação.
+        resposta = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-liquidada-distribuicao",
+                CAMPANHA_LIQUIDADA,
+                {
+                    "campanhaId": "campanha-1",
+                    "valorBruto": 10000,
+                    "taxaPlataforma": 0,
+                    "valorLiquido": 10000,
+                    "liquidadaEm": datetime.now(UTC).isoformat(),
+                    "aportes": ["aporte-dist-a", "aporte-dist-b"],
+                },
+            ),
+        )
+        assert resposta.status_code == 200
+
+        token_empreendedor = criar_token_investidor(
+            "empreendedor-1",
+            perfil="EMPREENDEDOR",
+        )
+
+        # Distribuir 10.000 centavos.
+        resposta = client.post(
+            "/retornos/campanhas/campanha-1/distribuir",
+            headers={"Authorization": f"Bearer {token_empreendedor}"},
+            json={"valorTotal": 10000},
+        )
+
+        assert resposta.status_code == 200
+        assert resposta.json()["valorTotal"] == 10000
+
+        distribuicoes = resposta.json()["distribuicoes"]
+
+        assert sum(item["valor"] for item in distribuicoes) == 10000
+
+        valores = {item["investidorId"]: item["valor"] for item in distribuicoes}
+
+        assert valores == {
+            "investidor-A": 6000,
+            "investidor-B": 4000,
+        }
+
+        # Consultar extrato individual.
+        token_a = criar_token_investidor("investidor-A")
+        token_b = criar_token_investidor("investidor-B")
+
+        extrato_a = client.get(
+            "/retornos/extrato",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+
+        extrato_b = client.get(
+            "/retornos/extrato",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+
+        assert extrato_a.status_code == 200
+        assert extrato_b.status_code == 200
+
+        assert sum(item["valor"] for item in extrato_a.json()) == 6000
+        assert sum(item["valor"] for item in extrato_b.json()) == 4000
+
+        # Conferir eventos registrados na outbox.
+        with open_db("custodia_retornos", tmp_path) as conn:
+            eventos = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM outbox_evento
+                WHERE tipo_evento = 'retorno.distribuido'
+                """,
+            ).fetchone()
+
+            assert eventos is not None
+            assert eventos[0] == 2
+
+            # Lotes e itens financeiros devem ser append-only.
+            lote = conn.execute(
+                """
+                SELECT lote_id
+                FROM retornos_lotes_distribuicao
+                WHERE campanha_id = ?
+                """,
+                ("campanha-1",),
+            ).fetchone()
+
+            item = conn.execute(
+                """
+                SELECT retorno_id
+                FROM retornos_distribuicao_itens
+                WHERE campanha_id = ?
+                LIMIT 1
+                """,
+                ("campanha-1",),
+            ).fetchone()
+
+            assert lote is not None
+            assert item is not None
+
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "UPDATE retornos_lotes_distribuicao "
+                    "SET valor_total = valor_total + 1 WHERE lote_id = ?",
+                    (lote[0],),
+                )
+
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "DELETE FROM retornos_lotes_distribuicao WHERE lote_id = ?",
+                    (lote[0],),
+                )
+
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "UPDATE retornos_distribuicao_itens SET valor = valor + 1 WHERE retorno_id = ?",
+                    (item[0],),
+                )
+
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "DELETE FROM retornos_distribuicao_itens WHERE retorno_id = ?",
+                    (item[0],),
+                )
+
+
+def test_rejeita_distribuicao_de_campanha_nao_liquidada(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Não permite distribuir retornos antes da liquidação."""
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        campanha = client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-nao-liquidada",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+        assert campanha.status_code == 200
+
+        token = criar_token_investidor(
+            "empreendedor-1",
+            perfil="EMPREENDEDOR",
+        )
+
+        resposta = client.post(
+            "/retornos/campanhas/campanha-1/distribuir",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"valorTotal": 10000},
+        )
+
+    assert resposta.status_code in (400, 409)
+
+
+def test_outro_empreendedor_nao_pode_distribuir(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Impede que outro empreendedor distribua retornos da campanha."""
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-outro-empreendedor",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+
+        token = criar_token_investidor(
+            "empreendedor-2",
+            perfil="EMPREENDEDOR",
+        )
+
+        resposta = client.post(
+            "/retornos/campanhas/campanha-1/distribuir",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"valorTotal": 10000},
+        )
+
+    assert resposta.status_code == 403
+
+
+def test_investidor_nao_pode_distribuir(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Impede que investidores executem distribuições."""
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        client.post(
+            "/events",
+            json=criar_entrega(
+                "evento-campanha-investidor",
+                CAMPANHA_PUBLICADA,
+                campanha_payload(),
+            ),
+        )
+
+        token = criar_token_investidor("investidor-A")
+
+        resposta = client.post(
+            "/retornos/campanhas/campanha-1/distribuir",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"valorTotal": 10000},
+        )
+
+    assert resposta.status_code == 403
+
+
+def test_distribuicao_sem_token_retorna_401(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Exige autenticação para distribuir retornos."""
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        resposta = client.post(
+            "/retornos/campanhas/campanha-1/distribuir",
+            json={"valorTotal": 10000},
+        )
+
+    assert resposta.status_code == 401
