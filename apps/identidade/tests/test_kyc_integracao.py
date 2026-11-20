@@ -57,7 +57,7 @@ def contar_verificacoes(data_dir: Path, usuario_id: str) -> int:
     return transaction(contar, "identidade", data_dir)
 
 
-def criar_entrega(usuario_id: str, event_id: str) -> dict:
+def criar_entrega(usuario_id: str, event_id: str) -> dict[str, object]:
     payload = UsuarioCadastrado(
         usuario_id=usuario_id,
         perfil=Perfil.INVESTIDOR,

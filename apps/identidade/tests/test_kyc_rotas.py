@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,7 +18,10 @@ from shared.db import open_db, transaction
 
 
 @pytest.fixture
-def ambiente(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def ambiente(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[TestClient, Path]]:
     monkeypatch.setenv("IDENTIDADE_MESSAGING_ENABLED", "false")
     monkeypatch.setenv("KYC_HASH_SECRET", "chave-exclusiva-para-testes-kyc")
     monkeypatch.setenv("JWT_SECRET", "chave-exclusiva-para-testes-jwt")
@@ -54,7 +58,7 @@ def criar_usuario_autenticado(data_dir: Path) -> tuple[str, str]:
     return usuario.id, token
 
 
-def test_status_exige_autenticacao(ambiente) -> None:
+def test_status_exige_autenticacao(ambiente: tuple[TestClient, Path]) -> None:
     cliente, _ = ambiente
 
     resposta = cliente.get("/kyc/status")
@@ -62,7 +66,7 @@ def test_status_exige_autenticacao(ambiente) -> None:
     assert resposta.status_code == 401
 
 
-def test_documentos_exige_autenticacao(ambiente) -> None:
+def test_documentos_exige_autenticacao(ambiente: tuple[TestClient, Path]) -> None:
     cliente, _ = ambiente
 
     resposta = cliente.post(
@@ -73,7 +77,7 @@ def test_documentos_exige_autenticacao(ambiente) -> None:
     assert resposta.status_code == 401
 
 
-def test_status_retorna_verificacao_pendente(ambiente) -> None:
+def test_status_retorna_verificacao_pendente(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     _, token = criar_usuario_autenticado(data_dir)
 
@@ -87,7 +91,7 @@ def test_status_retorna_verificacao_pendente(ambiente) -> None:
     assert resposta.json()["documentoTipo"] is None
 
 
-def test_documento_armazenado_apenas_com_hash(ambiente) -> None:
+def test_documento_armazenado_apenas_com_hash(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     usuario_id, token = criar_usuario_autenticado(data_dir)
     numero = "12345678909"
@@ -119,7 +123,7 @@ def test_documento_armazenado_apenas_com_hash(ambiente) -> None:
     assert len(registro[1]) == 64
 
 
-def test_usuario_nao_acessa_status_de_outro(ambiente) -> None:
+def test_usuario_nao_acessa_status_de_outro(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     usuario_a, token_a = criar_usuario_autenticado(data_dir)
     usuario_b, token_b = criar_usuario_autenticado(data_dir)
@@ -144,7 +148,9 @@ def test_usuario_nao_acessa_status_de_outro(ambiente) -> None:
     assert resposta_b.json()["verificacaoId"] == ids[usuario_b]
 
 
-def test_documento_nao_pode_ser_registrado_apos_aprovacao(ambiente) -> None:
+def test_documento_nao_pode_ser_registrado_apos_aprovacao(
+    ambiente: tuple[TestClient, Path],
+) -> None:
     cliente, data_dir = ambiente
     usuario_id, token = criar_usuario_autenticado(data_dir)
 
@@ -181,7 +187,7 @@ def test_documento_nao_pode_ser_registrado_apos_aprovacao(ambiente) -> None:
     assert registro == ("APROVADA", None)
 
 
-def test_nova_verificacao_rejeitada_com_pendente(ambiente) -> None:
+def test_nova_verificacao_rejeitada_com_pendente(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     _, token = criar_usuario_autenticado(data_dir)
 
@@ -193,7 +199,7 @@ def test_nova_verificacao_rejeitada_com_pendente(ambiente) -> None:
     assert resposta.status_code == 409
 
 
-def test_nova_verificacao_apos_reprovacao(ambiente) -> None:
+def test_nova_verificacao_apos_reprovacao(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     usuario_id, token = criar_usuario_autenticado(data_dir)
 
@@ -242,7 +248,7 @@ def test_nova_verificacao_apos_reprovacao(ambiente) -> None:
     ]
 
 
-def test_nova_verificacao_apos_expiracao(ambiente) -> None:
+def test_nova_verificacao_apos_expiracao(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     usuario_id, token = criar_usuario_autenticado(data_dir)
 
@@ -268,7 +274,7 @@ def test_nova_verificacao_apos_expiracao(ambiente) -> None:
     assert resposta.json()["status"] == "PENDENTE"
 
 
-def test_nova_verificacao_rejeitada_apos_aprovacao(ambiente) -> None:
+def test_nova_verificacao_rejeitada_apos_aprovacao(ambiente: tuple[TestClient, Path]) -> None:
     cliente, data_dir = ambiente
     usuario_id, token = criar_usuario_autenticado(data_dir)
 

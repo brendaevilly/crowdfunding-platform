@@ -119,6 +119,8 @@ def test_reprovacao_permite_nova_verificacao_e_preserva_historico(
         assert verificacao is not None
         reprovada = verificacao.reprovar()
 
+        assert reprovada.atualizado_em is not None
+
         conn.execute(
             """
             UPDATE kyc_verificacoes
