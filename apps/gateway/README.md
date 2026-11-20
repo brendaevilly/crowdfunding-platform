@@ -41,6 +41,19 @@ Em memória (token bucket): `RATE_LIMIT_REQUESTS` por `RATE_LIMIT_WINDOW_SECONDS
 
 Consulta o `/health` de cada serviço e devolve `status` `ok` (todos no ar) ou `degraded`, com `dependencies.<servico>.status` `up`/`down`, latência e métricas dos **circuit breakers** (`circuits` e `circuit_breakers`) agregados de cada serviço e do próprio gateway. Sempre 200 enquanto o gateway estiver de pé.
 
+## Interface Web (Frontend)
+
+O gateway serve uma interface mínima SPA cobrindo os casos de uso de investidor:
+- `GET /`: página principal da aplicação web (`static/index.html`)
+- `GET /static/{arquivo}`: recursos estáticos (`styles.css`, `app.js`) com proteção contra path traversal.
+
+### Fluxos suportados:
+1. **Cadastro e Login**: registro de novos usuários e obtenção de token JWT.
+2. **KYC**: envio de documento e acompanhamento do status cadastral.
+3. **Campanhas**: visualização de campanhas ativas com indicador de progresso da meta e prazo.
+4. **Aportes**: submissão de aporte gerando cabeçalho `Idempotency-Key` (UUIDv4), com feedback de erros (ex.: KYC pendente ou campanha encerrada).
+5. **Histórico e Notificações**: listagem dos aportes realizados pelo investidor, retornos e notificações em tempo real com opção de marcar como lida.
+
 ## Rodando
 
 `make dev` sobe o gateway por último. Sozinho: `uv run python -m gateway.main`.

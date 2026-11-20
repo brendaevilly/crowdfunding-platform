@@ -90,6 +90,7 @@ class CampanhaLiquidada(Contrato):
     taxa_plataforma: Centavos
     valor_liquido: Centavos
     liquidada_em: AwareDatetime
+    aportes: tuple[Id, ...] = ()
 
     @model_validator(mode="after")
     def _bruto_igual_taxa_mais_liquido(self) -> CampanhaLiquidada:

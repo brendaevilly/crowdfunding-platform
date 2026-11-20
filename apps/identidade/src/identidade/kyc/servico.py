@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from identidade.contas.repositorio import buscar_usuario_por_id
 from identidade.kyc.dominio import StatusVerificacao, VerificacaoIdentidade
+from identidade.kyc.provider import KycProvider
 from identidade.kyc.repositorio import (
     buscar_verificacao_pendente,
     listar_verificacoes_usuario,
@@ -132,6 +133,38 @@ def registrar_documento_kyc(
         return atualizada
 
     return transaction(operacao, "identidade", data_dir)
+
+
+def verificar_documento_com_provider(
+    usuario_id: str,
+    *,
+    tipo: str,
+    numero: str,
+    provider: KycProvider,
+    data_dir: str | Path = "data",
+) -> VerificacaoIdentidade:
+    """Verifica com provedor e persiste decisão atomicamente."""
+
+    from identidade.kyc.decisao import decidir_documento_automaticamente
+    from identidade.kyc.seguranca import gerar_hash_documento
+
+    resultado = provider.verificar(tipo=tipo, numero=numero)
+
+    if resultado.status not in (
+        StatusVerificacao.APROVADA,
+        StatusVerificacao.REPROVADA,
+    ):
+        raise ValueError("O provedor deve retornar APROVADA ou REPROVADA")
+
+    documento_hash = gerar_hash_documento(tipo, numero)
+
+    return decidir_documento_automaticamente(
+        usuario_id,
+        status=resultado.status,
+        tipo=tipo,
+        documento_hash=documento_hash,
+        data_dir=data_dir,
+    )
 
 
 def consultar_status_kyc(
