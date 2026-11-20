@@ -46,6 +46,7 @@ app = create_app(
 )
 
 app.include_router(criar_router(cliente_campanhas=cliente_campanhas))
+app.include_router(criar_router(cliente_campanhas=cliente_campanhas), prefix="/aportes")
 
 configure_messaging(
     app,

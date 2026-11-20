@@ -216,7 +216,7 @@ async function initHomePage() {
 
   let campanhas = [];
   try {
-    const res = await apiFetch("/api/campanhas/campanhas");
+    const res = await apiFetch("/api/campanhas");
     const itens = Array.isArray(res) ? res : res?.items || res?.campanhas || [];
     if (itens.length > 0) {
       campanhas = itens.map((item, idx) => ({
@@ -342,7 +342,7 @@ async function initCampaignDetailPage() {
 
   if (!campanha) {
     try {
-      const res = await apiFetch(`/api/campanhas/campanhas/${id}`);
+      const res = await apiFetch(`/api/campanhas/${id}`);
       if (res) {
         campanha = {
           id: res.id,
@@ -532,14 +532,15 @@ async function initCheckoutPage() {
 
     try {
       const centavos = Math.round(state.aporteValor * 100);
-      const res = await apiFetch("/api/aportes/aportes", {
+      const res = await apiFetch("/api/aportes", {
         method: "POST",
         headers: {
           "Idempotency-Key": state.idempotencyKey,
         },
         body: JSON.stringify({
           campanhaId: state.selectedCampanha.id,
-          valorCentavos: centavos,
+          investidorId: state.user?.id || "investidor-1",
+          valor: centavos,
         }),
       });
 
