@@ -10,8 +10,11 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from contracts.topicos import USUARIO_CADASTRADO
 from identidade.config import broker_url_padrao, identidade_url_padrao
 from identidade.contas.rotas import criar_contas_router
+from identidade.kyc.consumidor import consumir_usuario_cadastrado
+from identidade.kyc.rotas import criar_kyc_router
 from shared.db import migrate
 from shared.http.app import create_app
 from shared.messaging import configure_messaging
@@ -29,6 +32,8 @@ def criar_identidade_app(data_dir: str | Path = "data") -> FastAPI:
     contas_router = criar_contas_router(data_dir)
     app.include_router(contas_router)
     app.include_router(contas_router, prefix="/identidade")
+
+    app.include_router(criar_kyc_router(data_dir))
 
     @asynccontextmanager
     async def identidade_lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -51,7 +56,9 @@ def criar_identidade_app(data_dir: str | Path = "data") -> FastAPI:
             service="identidade",
             service_url=identidade_url_padrao(),
             broker_url=broker_url_padrao(),
-            handlers={},
+            handlers={
+                USUARIO_CADASTRADO: consumir_usuario_cadastrado,
+            },
             data_dir=data_dir,
         )
 
