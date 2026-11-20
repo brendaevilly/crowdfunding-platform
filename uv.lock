@@ -300,14 +300,12 @@ source = { editable = "apps/broker" }
 dependencies = [
     { name = "crowdfunding-contracts" },
     { name = "crowdfunding-shared" },
-    { name = "pika" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "crowdfunding-contracts", editable = "packages/contracts" },
     { name = "crowdfunding-shared", editable = "packages/shared" },
-    { name = "pika", specifier = ">=1.5.0" },
 ]
 
 [[package]]
