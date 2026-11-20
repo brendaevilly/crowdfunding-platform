@@ -118,6 +118,18 @@ def registrar_documento_kyc(
         verificacao = buscar_verificacao_pendente(conn, usuario_id)
 
         if verificacao is None:
+            processar_usuario_cadastrado(conn, usuario_id)
+            verificacao = buscar_verificacao_pendente(conn, usuario_id)
+
+        if verificacao is None:
+            historico = listar_verificacoes_usuario(conn, usuario_id)
+            if historico and historico[0].status in (
+                StatusVerificacao.REPROVADA,
+                StatusVerificacao.EXPIRADA,
+            ):
+                verificacao = _criar_verificacao(conn, usuario_id)
+
+        if verificacao is None:
             raise VerificacaoKycNaoEncontradaErro("Nenhuma verificação KYC pendente encontrada")
 
         atualizada = verificacao.registrar_documento(
@@ -175,6 +187,9 @@ def consultar_status_kyc(
 
     def operacao(conn: sqlite3.Connection) -> VerificacaoIdentidade | None:
         verificacoes = listar_verificacoes_usuario(conn, usuario_id)
+        if not verificacoes:
+            processar_usuario_cadastrado(conn, usuario_id)
+            verificacoes = listar_verificacoes_usuario(conn, usuario_id)
         return verificacoes[0] if verificacoes else None
 
     return transaction(operacao, "identidade", data_dir)

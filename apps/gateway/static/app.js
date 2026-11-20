@@ -587,9 +587,9 @@ async function carregarPainelIdentificacao() {
   let kycAprovado = false;
   try {
     const kyc = await apiFetch("/api/identidade/kyc/status");
-    kycAprovado = kyc?.status === "APROVADO" || kyc?.status === "VERIFICADO";
+    kycAprovado = kyc?.status === "APROVADA" || kyc?.status === "APROVADO" || kyc?.status === "VERIFICADO";
   } catch {
-    kycAprovado = true; // No ambiente local de desenvolvimento, mock tolerante
+    kycAprovado = false;
   }
 
   panel.innerHTML = `
@@ -630,7 +630,7 @@ async function carregarPainelIdentificacao() {
       try {
         await apiFetch("/api/identidade/kyc/documentos", {
           method: "POST",
-          body: JSON.stringify({ tipo: "CPF", numero: "123.456.789-00" }),
+          body: JSON.stringify({ tipo: "CPF", numero: "123.456.789-01" }),
         });
         await carregarPainelIdentificacao();
       } catch (e) {
@@ -783,11 +783,18 @@ async function initDashboardPage() {
       const numero = document.getElementById("dash-kyc-numero").value.trim();
 
       try {
-        await apiFetch("/api/identidade/kyc/documentos", {
+        const res = await apiFetch("/api/identidade/kyc/documentos", {
           method: "POST",
           body: JSON.stringify({ tipo, numero }),
         });
-        document.getElementById("kyc-feedback").innerHTML = `<span style="color: var(--accent-green); font-weight: 600;">Documento aprovado com sucesso!</span>`;
+        const status = res?.status || "PENDENTE";
+        if (status === "APROVADA" || status === "APROVADO") {
+          document.getElementById("kyc-feedback").innerHTML = `<span style="color: var(--accent-green); font-weight: 600;">Documento aprovado com sucesso!</span>`;
+        } else if (status === "REPROVADA" || status === "REPROVADO") {
+          document.getElementById("kyc-feedback").innerHTML = `<span style="color: var(--accent-red); font-weight: 600;">Documento reprovado. Dica: para testes, o validador reprova CPFs terminados em 0 e aprova finais de 1 a 9.</span>`;
+        } else {
+          document.getElementById("kyc-feedback").innerHTML = `<span style="color: var(--accent-green); font-weight: 600;">Documento enviado para verificação (${status}).</span>`;
+        }
         await carregarStatusKYCDashboard();
       } catch (err) {
         document.getElementById("kyc-feedback").innerHTML = `<span style="color: var(--accent-red); font-weight: 600;">Erro: ${err.message}</span>`;
@@ -806,8 +813,9 @@ async function carregarStatusKYCDashboard() {
   try {
     const res = await apiFetch("/api/identidade/kyc/status");
     const status = res?.status || "PENDENTE";
-    badge.textContent = status;
-    badge.className = `badge-status ${status === "APROVADO" || status === "VERIFICADO" ? "success" : "warning"}`;
+    const aprovado = status === "APROVADA" || status === "APROVADO" || status === "VERIFICADO";
+    badge.textContent = aprovado ? "Verificado" : (status === "REPROVADA" ? "Reprovado" : "Pendente");
+    badge.className = `badge-status ${aprovado ? "success" : (status === "REPROVADA" ? "danger" : "warning")}`;
   } catch {
     badge.textContent = "Não Verificado";
     badge.className = "badge-status warning";

@@ -371,6 +371,7 @@ def criar_app(
         # - desbloquear usuários (somente ADMIN).
         rota_identidade_protegida = destino.servico == "identidade" and (
             (request.method == "GET" and destino.caminho == "/identidade/usuarios/me")
+            or destino.caminho.startswith("/identidade/kyc/")
             or (
                 request.method == "POST"
                 and destino.caminho.startswith("/identidade/usuarios/")

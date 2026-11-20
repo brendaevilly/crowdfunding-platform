@@ -33,7 +33,9 @@ def criar_identidade_app(data_dir: str | Path = "data") -> FastAPI:
     app.include_router(contas_router)
     app.include_router(contas_router, prefix="/identidade")
 
-    app.include_router(criar_kyc_router(data_dir))
+    kyc_router = criar_kyc_router(data_dir)
+    app.include_router(kyc_router)
+    app.include_router(kyc_router, prefix="/identidade")
 
     @asynccontextmanager
     async def identidade_lifespan(application: FastAPI) -> AsyncIterator[None]:
