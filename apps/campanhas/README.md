@@ -46,11 +46,14 @@ O agregado raiz `Campanha` encapsula as regras centrais de captação de recurso
 
 ---
 
-## 3. Mensageria e Publicação de Eventos (Transactional Outbox)
+## 3. Mensageria e Consumo de Eventos
 
-- **Eventos Consumidos:**
+- **Eventos de Identidade Consumidos:**
   - `usuario.cadastrado` (`UsuarioCadastrado`): projeta o cadastro do usuário na tabela `usuarios_cache` com seu perfil (`EMPREENDEDOR`, `INVESTIDOR`, `ADMIN`).
   - `usuario.status-alterado` (`UsuarioStatusAlterado`): atualiza o status de bloqueio/desbloqueio (`ATIVO`, `BLOQUEADO`), respeitando monotonicidade temporal (`alteradoEm`).
+- **Eventos de Custódia/Pagamentos Consumidos (#20):**
+  - `campanha.total-arrecadado-atualizado` (`TotalArrecadadoAtualizado`): atualização estritamente crescente e monotônica de `valor_arrecadado` (`WHERE id = ? AND ? > valor_arrecadado`). Eventos fora de ordem ou com valores menores/iguais são ignorados sem disparar erro ou rollback.
+  - `campanha.resultado` (`ResultadoCampanha`): transiciona a campanha de `PUBLICADA` para `ENCERRADA`. É idempotente por agregado (`campanhaId`): se a campanha já se encontrar `ENCERRADA`, execuções subsequentes atuam como no-op seguro.
 - **Evento Publicado na Aprovação (`CampanhaPublicada`):**
   - Ao aprovar uma campanha (`POST /campanhas/:id/aprovar`), o microsserviço insere o evento no tópico `campanha.publicada` na tabela `outbox_evento` **dentro da mesma transação atômica** em que o status é atualizado para `PUBLICADA`.
   - O payload segue o contrato `contracts.eventos.CampanhaPublicada`:
