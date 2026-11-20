@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -394,6 +395,46 @@ def criar_app(
             status_code=resposta.status_code,
             headers=headers_para_cliente(resposta.headers),
         )
+
+    # ------------------------------------------------------------------
+    # Frontend estático servido pelo Gateway
+    # ------------------------------------------------------------------
+
+    diretorio_estatico = Path(__file__).resolve().parents[2] / "static"
+
+    @app.get("/", response_class=Response, include_in_schema=False)
+    async def index() -> Response:
+        index_file = diretorio_estatico / "index.html"
+        if not index_file.is_file():
+            raise AppError(404, "nao_encontrado", "Página inicial não encontrada.")
+        return Response(
+            content=index_file.read_bytes(),
+            media_type="text/html; charset=utf-8",
+        )
+
+    @app.get("/static/{arquivo:path}", response_class=Response, include_in_schema=False)
+    async def static_files(arquivo: str) -> Response:
+        caminho = (diretorio_estatico / arquivo).resolve()
+        # Previne path traversal fora da pasta static
+        if not str(caminho).startswith(str(diretorio_estatico.resolve())):
+            raise AppError(403, "acesso_negado", "Acesso negado.")
+        if not caminho.is_file():
+            raise AppError(404, "nao_encontrado", f"Arquivo '{arquivo}' não encontrado.")
+
+        ext = caminho.suffix.lower()
+        media_types = {
+            ".html": "text/html; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".js": "application/javascript; charset=utf-8",
+            ".json": "application/json",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon",
+        }
+        media_type = media_types.get(ext, "application/octet-stream")
+        return Response(content=caminho.read_bytes(), media_type=media_type)
 
     # ------------------------------------------------------------------
     # Registro das rotas do Gateway
