@@ -11,6 +11,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from shared.correlation import get_correlation_id, reset_correlation_id, set_correlation_id
 from shared.db import transaction
 from shared.idempotency import consume_once
 from shared.resilience import Bulkhead
@@ -115,6 +116,9 @@ def create_events_router(
                 detail="Tipo do evento não corresponde ao tópico",
             )
 
+        cid = delivery.correlationId or envelope.correlationId or get_correlation_id()
+        token = set_correlation_id(cid) if cid else None
+
         def process(conn: sqlite3.Connection) -> bool:
             processed, _ = consume_once(
                 envelope.eventId,
@@ -140,6 +144,9 @@ def create_events_router(
                 status_code=500,
                 detail="Falha ao processar evento",
             ) from None
+        finally:
+            if token is not None:
+                reset_correlation_id(token)
 
         return {
             "eventId": delivery.eventId,

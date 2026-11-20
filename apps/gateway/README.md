@@ -39,7 +39,7 @@ Em memória (token bucket): `RATE_LIMIT_REQUESTS` por `RATE_LIMIT_WINDOW_SECONDS
 
 ## `GET /health`
 
-Consulta o `/health` de cada serviço e devolve `status` `ok` (todos no ar) ou `degraded`, com `dependencies.<servico>.status` `up`/`down`. Sempre 200 enquanto o gateway estiver de pé.
+Consulta o `/health` de cada serviço e devolve `status` `ok` (todos no ar) ou `degraded`, com `dependencies.<servico>.status` `up`/`down`, latência e métricas dos **circuit breakers** (`circuits` e `circuit_breakers`) agregados de cada serviço e do próprio gateway. Sempre 200 enquanto o gateway estiver de pé.
 
 ## Interface Web (Frontend)
 

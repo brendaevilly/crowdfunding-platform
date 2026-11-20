@@ -62,6 +62,19 @@ Cada app depende **só** de `packages/*` e nunca importa outro app; `tests/test_
 
 `kill`, `start` e `status` falam com o launcher pela porta de controle `3090` (`DEV_CONTROL_PORT`). Um app sem `src/<app>/main.py` sobe como *placeholder* (`shared.http.placeholder`, só `/health`); quando o serviço real existir, basta criar o `main.py` chamando `shared.http.run(app, "<app>")`.
 
+## Observabilidade Local e Tracing
+
+Como a plataforma utiliza Sagas coreografadas orientadas a eventos assíncronos, a observabilidade é centralizada via `correlation-id`:
+
+- **Propagação contínua**: o gateway injeta `x-correlation-id`, propagado via HTTP para as rotas dos serviços, registrado no envelope de outbox transacional, publicado no broker e restaurado pelo consumidor em cada microsserviço.
+- **Rastreamento (`scripts/trace.py`)**: comando único que coleta logs estruturados e histórico de entregas, exibindo toda a Saga em ordem cronológica:
+  ```bash
+  python scripts/trace.py <correlationId>
+  python scripts/trace.py <correlationId> --json
+  ```
+- **Painel do Broker (`/painel`)**: interface visual e endpoint JSON no broker (`:3010/painel`) exibindo eventos recentes, entregas pendentes e mensagens na DLQ (com ação de replay).
+- **Health Agregado com Circuitos**: o `GET /health` do Gateway (:3000/health) monitora a saúde de cada dependência e o estado de todos os circuit breakers do sistema.
+
 ## Fluxo de desenvolvimento
 
 Todo trabalho nasce de uma **issue** e chega na `main` por **Pull Request**. Ninguém faz commit direto na `main`.

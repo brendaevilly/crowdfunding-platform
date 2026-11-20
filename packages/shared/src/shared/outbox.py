@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from shared.correlation import get_correlation_id
+
 
 @dataclass(frozen=True)
 class OutboxEvent:
@@ -15,7 +17,7 @@ class OutboxEvent:
     agregado_id: str
     tipo_evento: str
     payload: dict[str, Any]
-    correlation_id: str
+    correlation_id: str | None = None
     versao: int = 1
     event_id: str | None = None
 
@@ -30,13 +32,14 @@ def add(
     por confirmar ou desfazer tanto o estado quanto o evento.
     """
     event_id = evento.event_id or str(uuid.uuid4())
+    correlation_id = evento.correlation_id or get_correlation_id() or str(uuid.uuid4())
 
     envelope = {
         "eventId": event_id,
         "tipo": evento.tipo_evento,
         "versão": evento.versao,
         "ocorridoEm": datetime.now(UTC).isoformat(),
-        "correlationId": evento.correlation_id,
+        "correlationId": correlation_id,
         "payload": evento.payload,
     }
 

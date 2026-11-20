@@ -70,12 +70,13 @@ def publish_pending(
         limit,
     ):
         envelope = json.loads(payload_json)
+        correlation_id = envelope.get("correlationId") or envelope.get("correlation_id")
 
         request_body = {
             "eventId": envelope["eventId"],
             "topic": topic,
             "payload": envelope,
-            "correlationId": envelope.get("correlationId"),
+            "correlationId": correlation_id,
         }
 
         try:

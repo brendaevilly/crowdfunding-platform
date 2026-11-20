@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,7 @@ from shared.http import (
     ServiceClient,
     create_app,
 )
+from shared.resilience import CircuitBreaker, CircuitOpenError
 
 log = logging.getLogger("gateway")
 
@@ -44,6 +45,8 @@ class DependenciaSaude(BaseModel):
     status: str  # up | down
     latencyMs: float | None = None  # noqa: N815
     erro: str | None = None
+    circuits: dict[str, Any] | None = None
+    circuit_breakers: dict[str, Any] | None = None
 
 
 class GatewayHealth(BaseModel):
@@ -51,6 +54,8 @@ class GatewayHealth(BaseModel):
     service: str
     version: str
     dependencies: dict[str, DependenciaSaude]
+    circuits: dict[str, Any] | None = None
+    circuit_breakers: dict[str, Any] | None = None
 
 
 def _ip(request: Request) -> str:
@@ -89,6 +94,11 @@ def criar_app(
     )
 
     clientes: dict[str, ServiceClient] = {}
+    circuitos_gateway: dict[str, CircuitBreaker] = {
+        nome: CircuitBreaker(failure_threshold=5, recovery_timeout=10.0)
+        for nome in urls
+        if nome != NOME
+    }
 
     def cliente(nome: str) -> ServiceClient:
         if nome not in clientes:
@@ -132,6 +142,9 @@ def criar_app(
             transport=transport,
         )
 
+        circuito_gateway = circuitos_gateway.get(nome)
+        circuito_info = circuito_gateway.metrics() if circuito_gateway is not None else None
+
         try:
             async with sonda:
                 resposta = await sonda.get("/health")
@@ -141,21 +154,40 @@ def criar_app(
                 1,
             )
 
+            circuitos_remotos = None
+            if resposta.status_code == 200:
+                with suppress(Exception):
+                    payload = resposta.json()
+                    if isinstance(payload, dict):
+                        circuitos_remotos = (
+                            payload.get("circuit_breakers")
+                            or payload.get("circuitBreakers")
+                            or payload.get("circuits")
+                        )
+
+            circuito_final = circuitos_remotos or circuito_info
+
             if resposta.status_code == 200:
                 return nome, DependenciaSaude(
                     status="up",
                     latencyMs=ms,
+                    circuits=circuito_final,
+                    circuit_breakers=circuito_final,
                 )
 
             return nome, DependenciaSaude(
                 status="down",
                 erro=f"HTTP {resposta.status_code}",
+                circuits=circuito_info,
+                circuit_breakers=circuito_info,
             )
 
         except Exception as exc:
             return nome, DependenciaSaude(
                 status="down",
                 erro=type(exc).__name__,
+                circuits=circuito_info,
+                circuit_breakers=circuito_info,
             )
 
     @app.get(
@@ -170,11 +202,22 @@ def criar_app(
 
         todos_ok = all(dependencia.status == "up" for dependencia in deps.values())
 
+        circuitos_agregados: dict[str, Any] = {}
+        for nome, dep in deps.items():
+            if dep.circuits is not None:
+                circuitos_agregados[nome] = dep.circuits
+            elif dep.circuit_breakers is not None:
+                circuitos_agregados[nome] = dep.circuit_breakers
+            elif nome in circuitos_gateway:
+                circuitos_agregados[nome] = circuitos_gateway[nome].metrics()
+
         return GatewayHealth(
             status="ok" if todos_ok else "degraded",
             service=NOME,
             version=VERSAO,
             dependencies=deps,
+            circuits=circuitos_agregados,
+            circuit_breakers=circuitos_agregados,
         )
 
     # ------------------------------------------------------------------
@@ -347,13 +390,35 @@ def criar_app(
         # Encaminhamento da requisição ao microsserviço
         # --------------------------------------------------------------
 
+        circuito = circuitos_gateway.setdefault(
+            destino.servico,
+            CircuitBreaker(failure_threshold=5, recovery_timeout=10.0),
+        )
+
         try:
-            resposta = await cliente(destino.servico).request(
-                request.method,
-                alvo,
-                headers=headers_internos,
-                content=corpo,
+            resposta = await circuito.call(
+                lambda: cliente(destino.servico).request(
+                    request.method,
+                    alvo,
+                    headers=headers_internos,
+                    content=corpo,
+                )
             )
+
+        except CircuitOpenError as exc:
+            log.warning(
+                "circuito aberto para o serviço",
+                extra={"servico": destino.servico},
+            )
+
+            raise AppError(
+                503,
+                "servico_indisponivel",
+                (f"O serviço '{destino.servico}' está indisponível no momento (circuito aberto)."),
+                {
+                    "servico": destino.servico,
+                },
+            ) from exc
 
         except ERROS_DE_CONEXAO as exc:
             log.warning(
