@@ -54,7 +54,22 @@ Suas principais atribuições são:
 
 ---
 
-## 5. Testes
+## 5. Expiração e TTL de Notificações (#31)
+
+Substituto local para o recurso de TTL do DynamoDB:
+
+- **Job Periódico de Limpeza (`run_ttl_cleaner`):**
+  - Executa em background durante o ciclo de vida da aplicação.
+  - Remove automaticamente registros da tabela `notificacao` mais antigos que o tempo de retenção configurado.
+  - A remoção de notificações antigas não afeta a tabela de controle de mensageria (`evento_processado`), garantindo que a idempotência de eventos recentes permaneça intacta.
+- **Configurações via Variáveis de Ambiente:**
+  - `NOTIFICACAO_TTL_DIAS`: período de retenção em dias (padrão: `30`).
+  - `NOTIFICACAO_TTL_INTERVALO_SEGUNDOS`: intervalo entre ciclos de varredura em segundos (padrão: `3600.0`).
+  - `NOTIFICACAO_TTL_ENABLED`: habilita ou desabilita a execução da thread de limpeza (padrão: `true`, desabilitada em testes).
+
+---
+
+## 6. Testes
 
 ```bash
 # Executar suíte de testes de notificação:
