@@ -498,3 +498,698 @@ document.addEventListener("DOMContentLoaded", () => {
     carregarNotificacoes();
   }
 });
+
+// ==========================================
+// PAINEL DO EMPREENDEDOR - ISSUE #33
+// ==========================================
+
+state.minhasCampanhas = [];
+
+function obterIdUsuarioToken() {
+  try {
+    const partes = state.token.split(".");
+    const payload = JSON.parse(atob(
+      partes[1].replace(/-/g, "+").replace(/_/g, "/")
+    ));
+    return payload.sub;
+  } catch {
+    throw new Error("Não foi possível identificar o usuário autenticado.");
+  }
+}
+
+function escaparHTML(valor) {
+  return String(valor ?? "").replace(/[&<>"']/g, caractere => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[caractere]);
+}
+
+function dataParaCampo(valor) {
+  if (!valor) return "";
+  const data = new Date(valor);
+  const deslocamento = data.getTimezoneOffset();
+  return new Date(data.getTime() - deslocamento * 60000)
+    .toISOString().slice(0, 16);
+}
+
+function prepararDadosCampanha() {
+  const meta = Number(document.getElementById("campanha-meta").value);
+
+  if (!Number.isFinite(meta) || meta <= 0) {
+    throw new Error("Informe uma meta válida.");
+  }
+
+  const inicio = new Date(
+    document.getElementById("campanha-inicio").value
+  );
+  const fim = new Date(
+    document.getElementById("campanha-fim").value
+  );
+
+  if (
+    !Number.isFinite(inicio.getTime()) ||
+    !Number.isFinite(fim.getTime()) ||
+    fim <= inicio
+  ) {
+    throw new Error("A data final deve ser posterior à inicial.");
+  }
+
+  return {
+    titulo: document.getElementById("campanha-titulo").value.trim(),
+    descricao: document.getElementById("campanha-descricao").value.trim(),
+    meta: Math.round(meta * 100),
+    prazoInicio: inicio.toISOString(),
+    prazoFim: fim.toISOString()
+  };
+}
+
+function limparFormularioCampanha() {
+  document.getElementById("form-campanha").reset();
+  document.getElementById("campanha-id").value = "";
+  document.getElementById("campanha-versao").value = "";
+
+  document.querySelector("#form-campanha button[type='submit']")
+    .textContent = "Salvar rascunho";
+}
+
+async function carregarMinhasCampanhas() {
+  const container = document.getElementById("minhas-campanhas-container");
+
+  try {
+    if (!state.token || !state.user) {
+      throw new Error("Faça login para acessar suas campanhas.");
+    }
+
+    if (state.user.perfil !== "EMPREENDEDOR") {
+      throw new Error("Esta área é exclusiva para empreendedores.");
+    }
+
+    container.innerHTML = '<p>Carregando campanhas...</p>';
+
+    const usuarioId = obterIdUsuarioToken();
+
+    const campanhas = await apiFetch(
+      "/api/campanhas?limite=100"
+    );
+
+    state.minhasCampanhas = campanhas.filter(
+      campanha => campanha.empreendedorId === usuarioId
+    );
+
+    if (!state.minhasCampanhas.length) {
+      container.innerHTML =
+        '<p class="text-muted">Você ainda não possui campanhas.</p>';
+      return;
+    }
+
+    container.innerHTML = state.minhasCampanhas.map(campanha => {
+      const meta = Number(campanha.meta) || 0;
+      const arrecadado = Number(campanha.valorArrecadado) || 0;
+      const percentual = meta > 0
+        ? Math.min(100, arrecadado / meta * 100)
+        : 0;
+
+      const podeEditar = campanha.status === "RASCUNHO";
+      const podeSubmeter = campanha.status === "RASCUNHO";
+
+      return `
+        <article class="card mt-4">
+          <h3>${escaparHTML(campanha.titulo)}</h3>
+
+          <p>${escaparHTML(campanha.descricao)}</p>
+
+          <p><strong>Status:</strong>
+            <span class="badge badge-subtle">
+              ${escaparHTML(campanha.status)}
+            </span>
+          </p>
+
+          <p><strong>Meta:</strong> ${formatarCentavos(meta)}</p>
+
+          <p><strong>Arrecadado:</strong>
+            ${formatarCentavos(arrecadado)}
+          </p>
+
+          <div class="progress-container"
+               style="height:12px;background:#e5e7eb;border-radius:8px;overflow:hidden;">
+            <div style="width:${percentual}%;height:100%;background:#2563eb;"></div>
+          </div>
+
+          <p>${percentual.toFixed(1)}% da meta alcançada</p>
+
+          <p><strong>Prazo final:</strong>
+            ${escaparHTML(new Date(campanha.prazoFim).toLocaleString("pt-BR"))}
+          </p>
+
+          <small class="text-muted">ID: ${escaparHTML(campanha.id)}</small>
+
+          <div class="mt-4">
+            ${podeEditar ? `
+              <button class="btn btn-outline"
+                data-acao="editar"
+                data-id="${escaparHTML(campanha.id)}">
+                Editar
+              </button>
+            ` : ""}
+
+            ${podeSubmeter ? `
+              <button class="btn btn-primary"
+                data-acao="submeter"
+                data-id="${escaparHTML(campanha.id)}">
+                Submeter para moderação
+              </button>
+            ` : ""}
+          </div>
+        </article>
+      `;
+    }).join("");
+
+  } catch (erro) {
+    container.textContent = erro.message;
+  }
+}
+
+async function handleSalvarCampanha(e) {
+  e.preventDefault();
+
+  const feedback = document.getElementById("campanha-feedback");
+
+  try {
+    if (!state.token || state.user?.perfil !== "EMPREENDEDOR") {
+      throw new Error("Entre com uma conta de empreendedor.");
+    }
+
+    const dados = prepararDadosCampanha();
+    const campanhaId = document.getElementById("campanha-id").value;
+
+    const resultado = await apiFetch(
+      campanhaId
+        ? `/api/campanhas/${encodeURIComponent(campanhaId)}`
+        : "/api/campanhas",
+      {
+        method: campanhaId ? "PUT" : "POST",
+        body: JSON.stringify(dados)
+      }
+    );
+
+    feedback.textContent = campanhaId
+      ? "Campanha atualizada com sucesso!"
+      : "Rascunho criado com sucesso!";
+
+    feedback.className = "feedback success";
+
+    limparFormularioCampanha();
+    await carregarMinhasCampanhas();
+
+  } catch (erro) {
+    feedback.textContent = erro.message;
+    feedback.className = "feedback error";
+  }
+}
+
+function editarCampanha(id) {
+  const campanha = state.minhasCampanhas.find(
+    item => item.id === id
+  );
+
+  if (!campanha) {
+    exibirAlerta("Campanha não encontrada.", "error");
+    return;
+  }
+
+  if (campanha.status !== "RASCUNHO") {
+    exibirAlerta("Somente rascunhos podem ser editados.", "error");
+    return;
+  }
+
+  document.getElementById("campanha-id").value = campanha.id;
+  document.getElementById("campanha-titulo").value = campanha.titulo;
+  document.getElementById("campanha-descricao").value = campanha.descricao;
+  document.getElementById("campanha-meta").value =
+    (campanha.meta / 100).toFixed(2);
+  document.getElementById("campanha-inicio").value =
+    dataParaCampo(campanha.prazoInicio);
+  document.getElementById("campanha-fim").value =
+    dataParaCampo(campanha.prazoFim);
+
+  document.querySelector("#form-campanha button[type='submit']")
+    .textContent = "Salvar alterações";
+
+  document.getElementById("form-campanha").scrollIntoView({
+    behavior: "smooth"
+  });
+}
+
+async function submeterCampanha(id) {
+  if (!confirm("Deseja enviar esta campanha para moderação?")) return;
+
+  try {
+    await apiFetch(
+      `/api/campanhas/${encodeURIComponent(id)}/submeter`,
+      { method: "POST" }
+    );
+
+    exibirAlerta("Campanha enviada para moderação!", "success");
+    await carregarMinhasCampanhas();
+
+  } catch (erro) {
+    exibirAlerta(erro.message, "error");
+  }
+}
+
+async function handleDistribuirRetornos(e) {
+  e.preventDefault();
+
+  const feedback = document.getElementById("retorno-feedback");
+
+  try {
+    if (!state.token || state.user?.perfil !== "EMPREENDEDOR") {
+      throw new Error("Acesso exclusivo para empreendedores.");
+    }
+
+    const campanhaId = document.getElementById(
+      "retorno-campanha-id"
+    ).value.trim();
+
+    const valor = Number(
+      document.getElementById("retorno-valor").value
+    );
+
+    if (!campanhaId || !Number.isFinite(valor) || valor <= 0) {
+      throw new Error("Informe a campanha e um valor válido.");
+    }
+
+    const resultado = await apiFetch(
+      `/api/retornos/campanhas/${encodeURIComponent(campanhaId)}/distribuir`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          valorTotal: Math.round(valor * 100)
+        })
+      }
+    );
+
+    feedback.textContent =
+      `Distribuição realizada! Total: ${formatarCentavos(resultado.valorTotal)}.`;
+
+    feedback.className = "feedback success";
+    document.getElementById("form-distribuir-retornos").reset();
+
+  } catch (erro) {
+    feedback.textContent = erro.message;
+    feedback.className = "feedback error";
+  }
+}
+
+// ==========================================
+// EVENTOS DO PAINEL DO EMPREENDEDOR
+// ==========================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("form-campanha")
+    .addEventListener("submit", handleSalvarCampanha);
+
+  document.getElementById("btn-cancelar-edicao")
+    .addEventListener("click", limparFormularioCampanha);
+
+  document.getElementById("btn-atualizar-empreendedor")
+    .addEventListener("click", carregarMinhasCampanhas);
+
+  document.getElementById("form-distribuir-retornos")
+    .addEventListener("submit", handleDistribuirRetornos);
+
+  document.getElementById("minhas-campanhas-container")
+    .addEventListener("click", async evento => {
+      const botao = evento.target.closest("button[data-acao]");
+      if (!botao) return;
+
+      const id = botao.dataset.id;
+
+      if (botao.dataset.acao === "editar") {
+        editarCampanha(id);
+      }
+
+      if (botao.dataset.acao === "submeter") {
+        await submeterCampanha(id);
+      }
+    });
+});
+
+// ==========================================
+// PAINEL ADMINISTRATIVO - ISSUE #33
+// ==========================================
+
+function escaparHTMLAdmin(valor) {
+  return String(valor ?? "").replace(/[&<>"']/g, caractere => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[caractere]);
+}
+
+function feedbackAdmin(id, mensagem, erro = false) {
+  const elemento = document.getElementById(id);
+  elemento.textContent = mensagem;
+  elemento.className = erro
+    ? "feedback feedback-error"
+    : "feedback feedback-success";
+}
+
+async function carregarFilaModeracao() {
+  const container = document.getElementById(
+    "fila-moderacao-container"
+  );
+
+  container.textContent = "Carregando campanhas...";
+
+  try {
+    const campanhas = await apiFetch(
+      "/api/campanhas?limite=100"
+    );
+
+    const pendentes = campanhas.filter(campanha => {
+      const status = String(campanha.status || "").toUpperCase();
+
+      return status.includes("MODER")
+        || status.includes("ANALISE")
+        || status === "PENDENTE";
+    });
+
+    if (!pendentes.length) {
+      container.textContent =
+        "Nenhuma campanha aguardando moderação.";
+      return;
+    }
+
+    container.innerHTML = pendentes.map(campanha => `
+      <article class="card mt-4">
+        <h4>${escaparHTMLAdmin(campanha.titulo)}</h4>
+        <p>${escaparHTMLAdmin(campanha.descricao)}</p>
+        <p><strong>ID:</strong> ${escaparHTMLAdmin(campanha.id)}</p>
+        <p><strong>Empreendedor:</strong>
+          ${escaparHTMLAdmin(campanha.empreendedorId)}</p>
+        <p><strong>Meta:</strong>
+          ${formatarCentavos(campanha.meta)}</p>
+        <p><strong>Status:</strong>
+          ${escaparHTMLAdmin(campanha.status)}</p>
+
+        <button class="btn btn-success"
+          data-admin-acao="aprovar"
+          data-id="${escaparHTMLAdmin(campanha.id)}">
+          Aprovar
+        </button>
+
+        <button class="btn btn-danger"
+          data-admin-acao="reprovar"
+          data-id="${escaparHTMLAdmin(campanha.id)}">
+          Reprovar
+        </button>
+      </article>
+    `).join("");
+
+  } catch (erro) {
+    container.textContent = erro.message;
+  }
+}
+
+async function moderarCampanha(id, acao) {
+  try {
+    let body = {};
+
+    if (acao === "reprovar") {
+      const motivo = prompt("Informe o motivo da reprovação:");
+
+      if (!motivo || !motivo.trim()) return;
+
+      body = { motivo: motivo.trim() };
+    }
+
+    const confirmado = confirm(
+      `Deseja realmente ${acao} esta campanha?`
+    );
+
+    if (!confirmado) return;
+
+    await apiFetch(
+      `/api/campanhas/${encodeURIComponent(id)}/${acao}`,
+      {
+        method: "POST",
+        body: JSON.stringify(body)
+      }
+    );
+
+    exibirAlerta(
+      `Campanha ${acao === "aprovar" ? "aprovada" : "reprovada"} com sucesso!`,
+      "success"
+    );
+
+    await carregarFilaModeracao();
+
+  } catch (erro) {
+    exibirAlerta(erro.message);
+  }
+}
+
+async function alterarBloqueioUsuario(bloquear) {
+  const id = document.getElementById(
+    "admin-usuario-id"
+  ).value.trim();
+
+  const motivo = document.getElementById(
+    "admin-motivo-bloqueio"
+  ).value.trim();
+
+  if (!id) {
+    feedbackAdmin(
+      "admin-usuario-feedback",
+      "Informe o ID do usuário.",
+      true
+    );
+    return;
+  }
+
+  try {
+    await apiFetch(
+      `/api/identidade/usuarios/${encodeURIComponent(id)}/${bloquear ? "bloquear" : "desbloquear"}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ motivo })
+      }
+    );
+
+    feedbackAdmin(
+      "admin-usuario-feedback",
+      bloquear
+        ? "Usuário bloqueado com sucesso!"
+        : "Usuário desbloqueado com sucesso!"
+    );
+
+  } catch (erro) {
+    feedbackAdmin(
+      "admin-usuario-feedback",
+      erro.message,
+      true
+    );
+  }
+}
+
+async function carregarFilaKYC() {
+  const container = document.getElementById("fila-kyc-lista");
+
+  container.textContent = "Carregando verificações pendentes...";
+
+  try {
+    const verificacoes = await apiFetch(
+      "/api/identidade/kyc/admin/verificacoes/pendentes"
+    );
+
+    if (!verificacoes.length) {
+      container.innerHTML =
+        '<p class="text-muted">Nenhuma verificação pendente.</p>';
+      return;
+    }
+
+    container.innerHTML = verificacoes.map(verificacao => `
+      <article class="card mt-4">
+        <h4>Verificação de identidade</h4>
+
+        <p><strong>ID da verificação:</strong>
+          ${escaparHTMLAdmin(verificacao.verificacaoId)}</p>
+
+        <p><strong>ID do usuário:</strong>
+          ${escaparHTMLAdmin(verificacao.usuarioId)}</p>
+
+        <p><strong>Documento:</strong>
+          ${escaparHTMLAdmin(verificacao.documentoTipo || "Não informado")}</p>
+
+        <p><strong>Solicitado em:</strong>
+          ${escaparHTMLAdmin(
+            new Date(verificacao.criadoEm).toLocaleString("pt-BR")
+          )}</p>
+
+        <p><strong>Status:</strong>
+          ${escaparHTMLAdmin(verificacao.status)}</p>
+
+        <button class="btn btn-success"
+          data-kyc-acao="APROVADA"
+          data-id="${escaparHTMLAdmin(verificacao.usuarioId)}">
+          Aprovar KYC
+        </button>
+
+        <button class="btn btn-danger"
+          data-kyc-acao="REPROVADA"
+          data-id="${escaparHTMLAdmin(verificacao.usuarioId)}">
+          Reprovar KYC
+        </button>
+      </article>
+    `).join("");
+
+  } catch (erro) {
+    container.textContent = erro.message;
+  }
+}
+
+async function decidirKYC(usuarioId, status) {
+  const acao = status === "APROVADA" ? "aprovar" : "reprovar";
+
+  if (!confirm(`Deseja realmente ${acao} esta verificação KYC?`)) {
+    return;
+  }
+
+  try {
+    await apiFetch(
+      `/api/identidade/kyc/admin/verificacoes/${encodeURIComponent(usuarioId)}/decisao`,
+      {
+        method: "POST",
+        body: JSON.stringify({ status })
+      }
+    );
+
+    feedbackAdmin(
+      "admin-kyc-feedback",
+      `Verificação KYC ${acao} com sucesso!`
+    );
+
+    await carregarFilaKYC();
+
+  } catch (erro) {
+    feedbackAdmin(
+      "admin-kyc-feedback",
+      erro.message,
+      true
+    );
+  }
+}
+
+// Eventos do painel administrativo.
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("btn-atualizar-admin")
+    .addEventListener("click", () => {
+      carregarFilaModeracao();
+      carregarFilaKYC();
+    });
+
+  document.getElementById("btn-atualizar-kyc-admin")
+    .addEventListener("click", carregarFilaKYC);
+
+  document.getElementById("form-bloquear-usuario")
+    .addEventListener("submit", evento => {
+      evento.preventDefault();
+      alterarBloqueioUsuario(true);
+    });
+
+  document.getElementById("btn-desbloquear-usuario")
+    .addEventListener("click", () => {
+      alterarBloqueioUsuario(false);
+    });
+
+  document.getElementById("fila-kyc-lista")
+    .addEventListener("click", evento => {
+      const botao = evento.target.closest("button[data-kyc-acao]");
+
+      if (!botao) return;
+
+      decidirKYC(
+        botao.dataset.id,
+        botao.dataset.kycAcao
+      );
+    });
+
+  document.getElementById("fila-moderacao-container")
+    .addEventListener("click", evento => {
+      const botao = evento.target.closest(
+        "button[data-admin-acao]"
+      );
+
+      if (!botao) return;
+
+      moderarCampanha(
+        botao.dataset.id,
+        botao.dataset.adminAcao
+      );
+    });
+});
+
+// ==========================================
+// PAINEL DEV - CONTROLE DO RELÓGIO - ISSUE #33
+// ==========================================
+
+async function handleAvancarRelogio(evento) {
+  evento.preventDefault();
+
+  const campo = document.getElementById("clock-segundos");
+  const feedback = document.getElementById("clock-feedback");
+  const botao = evento.submitter;
+
+  const segundos = Number(campo.value);
+
+  if (!Number.isFinite(segundos) || segundos <= 0) {
+    feedbackAdmin(
+      "clock-feedback",
+      "Informe uma quantidade de segundos maior que zero.",
+      true
+    );
+    return;
+  }
+
+  if (botao) botao.disabled = true;
+
+  feedback.textContent = "Avançando relógio...";
+
+  try {
+    const resultado = await apiFetch(
+      "/api/retornos/_dev/clock/advance",
+      {
+        method: "POST",
+        body: JSON.stringify({ seconds: segundos })
+      }
+    );
+
+    const dataFormatada = new Date(resultado.now)
+      .toLocaleString("pt-BR");
+
+    feedbackAdmin(
+      "clock-feedback",
+      `Relógio avançado com sucesso! Nova data: ${dataFormatada}. Campanhas apuradas: ${resultado.apuradas}.`
+    );
+
+  } catch (erro) {
+    feedbackAdmin(
+      "clock-feedback",
+      erro.message,
+      true
+    );
+  } finally {
+    if (botao) botao.disabled = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("form-avancar-relogio")
+    .addEventListener("submit", handleAvancarRelogio);
+});

@@ -11,6 +11,7 @@ from identidade.kyc.dominio import StatusVerificacao, VerificacaoIdentidade
 from identidade.kyc.provider import KycProvider
 from identidade.kyc.repositorio import (
     buscar_verificacao_pendente,
+    listar_verificacoes_pendentes,
     listar_verificacoes_usuario,
     salvar_verificacao,
 )
@@ -176,5 +177,16 @@ def consultar_status_kyc(
     def operacao(conn: sqlite3.Connection) -> VerificacaoIdentidade | None:
         verificacoes = listar_verificacoes_usuario(conn, usuario_id)
         return verificacoes[0] if verificacoes else None
+
+    return transaction(operacao, "identidade", data_dir)
+
+
+def listar_verificacoes_pendentes_admin(
+    data_dir: str | Path = "data",
+) -> list[VerificacaoIdentidade]:
+    """Retorna todas as verificações pendentes para a fila administrativa."""
+
+    def operacao(conn: sqlite3.Connection) -> list[VerificacaoIdentidade]:
+        return listar_verificacoes_pendentes(conn)
 
     return transaction(operacao, "identidade", data_dir)

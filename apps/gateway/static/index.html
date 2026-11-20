@@ -31,6 +31,9 @@
       <button class="tab-btn" data-tab="tab-campanhas">Campanhas Ativas</button>
       <button class="tab-btn" data-tab="tab-aporte">Realizar Aporte</button>
       <button class="tab-btn" data-tab="tab-historico">Histórico & Notificações</button>
+      <button class="tab-btn" data-tab="tab-empreendedor">Painel do Empreendedor</button>
+      <button class="tab-btn" data-tab="tab-admin">Painel Administrativo</button>
+      <button class="tab-btn" data-tab="tab-dev">Painel Dev</button>
     </nav>
 
     <!-- ABA 1: AUTENTICAÇÃO (CADASTRO E LOGIN) -->
@@ -190,7 +193,174 @@
         </div>
       </div>
     </section>
-  </main>
+
+    <!-- ABA 6: PAINEL DO EMPREENDEDOR -->
+    <section id="tab-empreendedor" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2>Painel do Empreendedor</h2>
+          <p class="text-muted">Gerencie suas campanhas e acompanhe seus resultados.</p>
+        </div>
+        <button id="btn-atualizar-empreendedor" class="btn btn-outline">
+          Atualizar
+        </button>
+      </div>
+
+      <div class="card">
+        <h3>Criar campanha</h3>
+        <form id="form-campanha">
+          <input type="hidden" id="campanha-id">
+          <input type="hidden" id="campanha-versao">
+
+          <div class="form-group">
+            <label for="campanha-titulo">Título</label>
+            <input id="campanha-titulo" required maxlength="120">
+          </div>
+
+          <div class="form-group">
+            <label for="campanha-descricao">Descrição</label>
+            <textarea id="campanha-descricao" required rows="4"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="campanha-meta">Meta (R$)</label>
+            <input id="campanha-meta" type="number" min="0.01"
+              step="0.01" required>
+          </div>
+
+          <div class="grid-2-col">
+            <div class="form-group">
+              <label for="campanha-inicio">Data de início</label>
+              <input id="campanha-inicio" type="datetime-local" required>
+            </div>
+
+            <div class="form-group">
+              <label for="campanha-fim">Data de encerramento</label>
+              <input id="campanha-fim" type="datetime-local" required>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            Salvar rascunho
+          </button>
+          <button type="button" id="btn-cancelar-edicao"
+            class="btn btn-outline">
+            Limpar formulário
+          </button>
+        </form>
+        <div id="campanha-feedback" class="feedback"></div>
+      </div>
+
+      <div class="card mt-4">
+        <h3>Minhas campanhas</h3>
+        <div id="minhas-campanhas-container">
+          <p class="text-muted">Carregue suas campanhas.</p>
+        </div>
+      </div>
+
+      <div class="card mt-4">
+        <h3>Distribuição de retornos</h3>
+        <form id="form-distribuir-retornos">
+          <div class="form-group">
+            <label for="retorno-campanha-id">ID da campanha</label>
+            <input id="retorno-campanha-id" required>
+          </div>
+          <div class="form-group">
+            <label for="retorno-valor">Valor total (R$)</label>
+            <input id="retorno-valor" type="number"
+              min="0.01" step="0.01" required>
+          </div>
+          <button type="submit" class="btn btn-success">
+            Distribuir retornos
+          </button>
+        </form>
+        <div id="retorno-feedback" class="feedback"></div>
+      </div>
+    </section>
+
+    <!-- ABA 7: PAINEL ADMINISTRATIVO -->
+    <section id="tab-admin" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2>Painel Administrativo</h2>
+          <p class="text-muted">Moderação de campanhas e gerenciamento de usuários.</p>
+        </div>
+        <button id="btn-atualizar-admin" class="btn btn-outline">
+          Atualizar painel
+        </button>
+      </div>
+
+      <div class="card">
+        <h3>Fila de moderação</h3>
+        <div id="fila-moderacao-container">
+          <p class="text-muted">Nenhuma campanha carregada.</p>
+        </div>
+      </div>
+
+      <div class="card mt-4">
+        <h3>Gerenciamento de usuários</h3>
+        <form id="form-bloquear-usuario">
+          <div class="form-group">
+            <label for="admin-usuario-id">ID do usuário</label>
+            <input id="admin-usuario-id" required>
+          </div>
+          <div class="form-group">
+            <label for="admin-motivo-bloqueio">Justificativa</label>
+            <textarea id="admin-motivo-bloqueio" rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-danger">
+            Bloquear usuário
+          </button>
+          <button type="button" id="btn-desbloquear-usuario"
+            class="btn btn-outline">
+            Desbloquear usuário
+          </button>
+        </form>
+        <div id="admin-usuario-feedback" class="feedback"></div>
+      </div>
+
+      <div class="card mt-4">
+        <div class="section-header">
+          <h3>Verificação de identidade (KYC)</h3>
+          <button type="button" id="btn-atualizar-kyc-admin"
+            class="btn btn-sm btn-outline">
+            Atualizar fila
+          </button>
+        </div>
+
+        <div id="fila-kyc-lista">
+          <p class="text-muted">
+            Clique em atualizar para carregar as verificações pendentes.
+          </p>
+        </div>
+        <div id="admin-kyc-feedback" class="feedback"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ABA 8: PAINEL DE DESENVOLVIMENTO -->
+    <section id="tab-dev" class="tab-content">
+      <div class="card max-w-600">
+        <h2>Controle do relógio</h2>
+        <p class="text-muted">
+          Avance o relógio virtual para testar prazos e encerramento
+          automático das campanhas.
+        </p>
+
+        <form id="form-avancar-relogio">
+          <div class="form-group">
+            <label for="clock-segundos">Avançar tempo (segundos)</label>
+            <input id="clock-segundos" type="number"
+              min="1" step="1" value="3600" required>
+          </div>
+          <button type="submit" class="btn btn-primary">
+            Avançar relógio
+          </button>
+        </form>
+        <div id="clock-feedback" class="feedback"></div>
+      </div>
+    </section>
+\n  </main>
 
   <footer class="app-footer">
     <div class="footer-container">
