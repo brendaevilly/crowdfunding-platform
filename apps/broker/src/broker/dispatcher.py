@@ -207,7 +207,11 @@ def dispatch_pending() -> int:
         except httpx.HTTPError as exc:
             new_attempts = attempts + 1
             exhausted = new_attempts >= max_attempts()
-            error_message = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError):
+                detalhe = exc.response.text.strip()
+                error_message = f"HTTP {exc.response.status_code}: {detalhe or str(exc)}"
+            else:
+                error_message = str(exc)
 
             updated = transaction(
                 partial(

@@ -899,3 +899,32 @@ def test_distribuicao_sem_token_retorna_401(
         )
 
     assert resposta.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "topic",
+    [
+        "campanha.publicada",
+        "aporte.confirmado",
+        "campanha.resultado",
+        "campanha.liquidada",
+    ],
+)
+def test_consumidores_rejeitam_payloads_invalidos_via_http(
+    topic: str,
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Os consumidores reais rejeitam payloads inválidos pelo endpoint HTTP."""
+    with criar_cliente(monkeypatch, tmp_path) as client:
+        resposta = client.post(
+            "/events",
+            json=criar_entrega(
+                f"evento-invalido-{topic}",
+                topic,
+                {},
+            ),
+        )
+
+    assert resposta.status_code == 422
+    assert resposta.json()

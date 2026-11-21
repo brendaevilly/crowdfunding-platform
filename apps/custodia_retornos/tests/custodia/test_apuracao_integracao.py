@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from contracts.catalogo import ler_envelope
 from contracts.eventos import AporteConfirmado, CampanhaPublicada, ResultadoCampanha
 from contracts.topicos import RESULTADO_CAMPANHA
 from custodia_retornos.app import MIGRATIONS_DIR
@@ -99,8 +100,21 @@ def test_eventos_reais_geram_resultado_com_identificadores(
 
     assert topico == RESULTADO_CAMPANHA
 
-    envelope = json.loads(envelope_json)
-    evento = ResultadoCampanha.model_validate(envelope["payload"])
+    legado = json.loads(envelope_json)
+    envelope = ler_envelope(
+        {
+            "eventId": legado["eventId"],
+            "topic": topico,
+            "schemaVersion": legado.get("versão", 1),
+            "occurredAt": legado["ocorridoEm"],
+            "correlationId": legado.get("correlationId"),
+            "payload": legado["payload"],
+        }
+    )
+
+    assert envelope.topic == topico
+    assert isinstance(envelope.payload, ResultadoCampanha)
+    evento = envelope.payload
 
     assert evento.campanha_id == "campanha-1"
     assert evento.empreendedor_id == "empreendedor-1"

@@ -1,6 +1,6 @@
 """Testes de cadastro e ativação de usuários no serviço Identidade."""
 
-import json
+import json as jsonlib
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -10,6 +10,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from contracts.catalogo import ler_envelope
+from contracts.eventos import UsuarioCadastrado
 from contracts.topicos import USUARIO_CADASTRADO
 from identidade.app import criar_identidade_app
 from shared.db import open_db
@@ -75,8 +77,21 @@ def test_cadastrar_usuario_com_sucesso(client: tuple[TestClient, Path]) -> None:
         assert outbox_row[1] == USUARIO_CADASTRADO
         assert outbox_row[3] == "PENDENTE"
 
-        envelope = json.loads(outbox_row[2])
-        evento_payload = envelope["payload"]
+        # A Outbox armazena "tipo"; o catálogo espera "topic".
+        dados_envelope = jsonlib.loads(outbox_row[2])
+        dados_envelope["topic"] = outbox_row[1]
+        dados_envelope["schemaVersion"] = dados_envelope.pop("versão")
+        dados_envelope["occurredAt"] = dados_envelope.pop("ocorridoEm")
+        dados_envelope.pop("tipo", None)
+
+        # Valida o evento real da Outbox pelo catálogo oficial.
+        envelope = ler_envelope(dados_envelope)
+        assert isinstance(envelope.payload, UsuarioCadastrado)
+
+        evento_payload = envelope.payload.model_dump(
+            by_alias=True,
+            mode="json",
+        )
         assert evento_payload["usuarioId"] == usuario_id
         assert evento_payload["perfil"] == "EMPREENDEDOR"
         assert "cadastradoEm" in evento_payload

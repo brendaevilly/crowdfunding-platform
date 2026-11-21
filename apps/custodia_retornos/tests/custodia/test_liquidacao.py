@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from contracts.catalogo import ler_envelope
+from contracts.eventos import CampanhaLiquidada
 from custodia_retornos.custodia.dominio import (
     Movimentacao,
     TipoMovimentacao,
@@ -152,8 +154,22 @@ def test_liquidacao_sucesso_desconta_taxa_e_publica_evento(
     assert len(eventos) == 1
     assert eventos[0][0] == "campanha.liquidada"
 
-    envelope = json.loads(eventos[0][1])
-    payload = envelope["payload"]
+    legado = json.loads(eventos[0][1])
+    envelope = ler_envelope(
+        {
+            "eventId": legado["eventId"],
+            "topic": eventos[0][0],
+            "schemaVersion": legado.get("versão", 1),
+            "occurredAt": legado["ocorridoEm"],
+            "correlationId": legado.get("correlationId"),
+            "payload": legado["payload"],
+        }
+    )
+
+    assert envelope.topic == eventos[0][0]
+    assert isinstance(envelope.payload, CampanhaLiquidada)
+
+    payload = legado["payload"]
 
     assert payload["campanhaId"] == "campanha-teste"
     assert payload["valorBruto"] == 10000

@@ -9,9 +9,14 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
-from shared.correlation import get_correlation_id, reset_correlation_id, set_correlation_id
+from contracts.catalogo import ContratoInvalido, ler_envelope
+from shared.correlation import (
+    get_correlation_id,
+    reset_correlation_id,
+    set_correlation_id,
+)
 from shared.db import transaction
 from shared.idempotency import consume_once
 from shared.resilience import Bulkhead
@@ -19,19 +24,6 @@ from shared.resilience import Bulkhead
 logger = logging.getLogger(__name__)
 
 EventHandler = Callable[[sqlite3.Connection, dict[str, Any]], None]
-
-
-class EventEnvelope(BaseModel):
-    """Envelope padrão de eventos."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    eventId: str = Field(min_length=1)
-    tipo: str = Field(min_length=1)
-    versao: int = Field(default=1, ge=1, alias="versão")
-    ocorridoEm: str = Field(min_length=1)
-    correlationId: str | None = None
-    payload: dict[str, Any]
 
 
 class BrokerDelivery(BaseModel):
@@ -78,7 +70,7 @@ def create_events_router(
     data_dir: str | Path = "data",
     max_concurrent_per_topic: int = 5,
 ) -> APIRouter:
-    """Cria POST /events com Bulkhead independente por tópico."""
+    """Cria POST /events com validação de contratos e Bulkhead por tópico."""
     if max_concurrent_per_topic < 1:
         raise ValueError("max_concurrent_per_topic deve ser positivo")
 
@@ -87,43 +79,72 @@ def create_events_router(
     bulkheads = {topic: Bulkhead(max_concurrent=max_concurrent_per_topic) for topic in handlers}
 
     @router.post("/events")
-    async def receive_event(delivery: BrokerDelivery) -> dict[str, str | bool]:
+    async def receive_event(
+        delivery: BrokerDelivery,
+    ) -> dict[str, str | bool]:
         handler = handlers.get(delivery.topic)
 
         if handler is None:
             raise HTTPException(
-                status_code=404,
-                detail=f"Tópico não registrado: {delivery.topic}",
+                status_code=422,
+                detail=f"Contrato de evento inválido: tópico não registrado: {delivery.topic}",
             )
+
+        dados_legados = delivery.payload
 
         try:
-            envelope = EventEnvelope.model_validate(delivery.payload)
-        except ValueError as exc:
+            if dados_legados.get("tipo") != delivery.topic:
+                raise ContratoInvalido("Tipo do evento não corresponde ao tópico da entrega")
+
+            envelope_oficial = {
+                "eventId": dados_legados["eventId"],
+                "topic": delivery.topic,
+                "schemaVersion": dados_legados.get(
+                    "versão",
+                    dados_legados.get("versao", 1),
+                ),
+                "occurredAt": dados_legados["ocorridoEm"],
+                "correlationId": (
+                    delivery.correlationId
+                    or dados_legados.get("correlationId")
+                    or get_correlation_id()
+                    or delivery.eventId
+                ),
+                "payload": dados_legados["payload"],
+            }
+
+            envelope = ler_envelope(envelope_oficial)
+
+            if envelope.event_id != delivery.eventId:
+                raise ContratoInvalido("eventId da entrega não corresponde ao envelope")
+
+        except (ContratoInvalido, KeyError, TypeError, ValueError) as exc:
+            logger.warning(
+                "Contrato rejeitado: serviço=%s tópico=%s evento=%s motivo=%s",
+                service,
+                delivery.topic,
+                delivery.eventId,
+                exc,
+            )
             raise HTTPException(
                 status_code=422,
-                detail="Envelope de evento inválido",
+                detail=f"Contrato de evento inválido: {exc}",
             ) from exc
 
-        if envelope.eventId != delivery.eventId:
-            raise HTTPException(
-                status_code=422,
-                detail="eventId da entrega não corresponde ao envelope",
-            )
-
-        if envelope.tipo != delivery.topic:
-            raise HTTPException(
-                status_code=422,
-                detail="Tipo do evento não corresponde ao tópico",
-            )
-
-        cid = delivery.correlationId or envelope.correlationId or get_correlation_id()
+        cid = delivery.correlationId or envelope.correlation_id or get_correlation_id()
         token = set_correlation_id(cid) if cid else None
 
         def process(conn: sqlite3.Connection) -> bool:
             processed, _ = consume_once(
-                envelope.eventId,
+                envelope.event_id,
                 conn,
-                lambda tx: handler(tx, envelope.payload),
+                lambda tx: handler(
+                    tx,
+                    envelope.payload.model_dump(
+                        by_alias=True,
+                        mode="json",
+                    ),
+                ),
             )
             return processed
 

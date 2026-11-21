@@ -159,3 +159,55 @@ def test_dlq_e_replay(tmp_path, monkeypatch):
         assert lease_token is None
 
         assert client.get("/dlq").json() == []
+
+
+def test_rejeicao_de_contrato_422_vai_para_dlq(
+    tmp_path,
+    monkeypatch,
+):
+    """Rejeição HTTP 422 deve chegar à DLQ com o motivo."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BROKER_DISPATCH_ENABLED", "false")
+    monkeypatch.setenv("BROKER_MAX_ATTEMPTS", "1")
+
+    def fake_invalid(url, json, timeout):
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            422,
+            request=request,
+            text='{"detail":"Contrato de evento inválido: aporteId ausente"}',
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_invalid)
+
+    assinatura = {
+        "service": "aportes",
+        "topic": "aporte.confirmado",
+        "url": "http://localhost:3002",
+    }
+
+    evento = {
+        "eventId": "evento-contrato-invalido",
+        "topic": "aporte.confirmado",
+        "payload": {},
+        "correlationId": "correlation-contrato",
+    }
+
+    with TestClient(app) as client:
+        resposta = client.post("/subscriptions", json=assinatura)
+        assert resposta.status_code == 201
+
+        resposta = client.post("/publish", json=evento)
+        assert resposta.status_code == 201
+
+        assert dispatch_pending() == 0
+
+        resposta = client.get("/dlq")
+        assert resposta.status_code == 200
+
+        mensagens = resposta.json()
+        assert len(mensagens) == 1
+        assert mensagens[0]["eventId"] == "evento-contrato-invalido"
+        assert mensagens[0]["attempts"] == 1
+        assert "HTTP 422" in mensagens[0]["lastError"]
+        assert "Contrato de evento inválido" in mensagens[0]["lastError"]

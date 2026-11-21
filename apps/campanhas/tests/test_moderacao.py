@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 from campanhas.app import criar_campanhas_app
 from campanhas.repository import inicializar_banco
 from campanhas.usuarios_cache import consumir_usuario_cadastrado
+from contracts.catalogo import ler_envelope
+from contracts.eventos import CampanhaPublicada
 from contracts.topicos import CAMPANHA_PUBLICADA
 from shared.db import open_db
 
@@ -150,9 +152,22 @@ def test_aprovacao_e_publicacao_outbox(client_e_dados: tuple[TestClient, Path]) 
         assert row is not None
         assert row[0] == cid
         assert row[1] == CAMPANHA_PUBLICADA
-        envelope = json.loads(row[2])
-        assert envelope["correlationId"] == "corr-aprova-1"
-        payload = envelope["payload"]
+        dados_envelope = json.loads(row[2])
+        assert dados_envelope["correlationId"] == "corr-aprova-1"
+
+        # Adapta o formato interno da Outbox ao envelope do catálogo.
+        dados_envelope["topic"] = dados_envelope.pop("tipo")
+        dados_envelope["schemaVersion"] = dados_envelope.pop("versão")
+        dados_envelope["occurredAt"] = dados_envelope.pop("ocorridoEm")
+
+        # Valida o evento pelo contrato oficial.
+        envelope = ler_envelope(dados_envelope)
+        assert isinstance(envelope.payload, CampanhaPublicada)
+
+        payload = envelope.payload.model_dump(
+            by_alias=True,
+            mode="json",
+        )
         assert payload["campanhaId"] == cid
         assert payload["empreendedorId"] == "emp-1"
         assert payload["meta"] == 1000000
