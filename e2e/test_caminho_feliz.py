@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -31,11 +32,7 @@ def requisicao(
     if headers:
         cabecalhos.update(headers)
 
-    dados = (
-        json.dumps(payload).encode("utf-8")
-        if payload is not None
-        else None
-    )
+    dados = json.dumps(payload).encode("utf-8") if payload is not None else None
 
     request = urllib.request.Request(
         f"{GATEWAY}{caminho}",
@@ -79,9 +76,7 @@ def obter_token(email: str, senha: str) -> str:
         },
     )
 
-    assert status_http == 200, (
-        f"Falha no login de {email}: {resposta}"
-    )
+    assert status_http == 200, f"Falha no login de {email}: {resposta}"
     assert isinstance(resposta, dict)
     assert "access_token" in resposta
 
@@ -107,9 +102,7 @@ def cadastrar_usuario(
         },
     )
 
-    assert status_http == 201, (
-        f"Falha no cadastro de {perfil}: {resposta}"
-    )
+    assert status_http == 201, f"Falha no cadastro de {perfil}: {resposta}"
     assert isinstance(resposta, dict)
     assert resposta["perfil"] == perfil
 
@@ -137,8 +130,6 @@ def criar_usuario_autenticado(
     token = obter_token(email, senha)
 
     return usuario, token
-
-
 
 
 def enviar_kyc(token: str, numero: str) -> dict[str, Any]:
@@ -185,10 +176,7 @@ def aguardar_notificacoes_retornos(
 
     import time
 
-    esperados = {
-        str(item["investidorId"]): str(item["retornoId"])
-        for item in distribuicoes
-    }
+    esperados = {str(item["investidorId"]): str(item["retornoId"]) for item in distribuicoes}
 
     assert len(esperados) == len(investidores), (
         "Quantidade de notificações esperadas diverge dos investidores."
@@ -208,8 +196,7 @@ def aguardar_notificacoes_retornos(
 
             recebida = any(
                 notificacao.get("tipoEvento") == "retorno.distribuido"
-                and notificacao.get("eventoOrigemId")
-                == esperados[investidor_id]
+                and notificacao.get("eventoOrigemId") == esperados[investidor_id]
                 for notificacao in notificacoes
             )
 
@@ -217,17 +204,13 @@ def aguardar_notificacoes_retornos(
                 pendentes.remove(investidor_id)
 
         if not pendentes:
-            print(
-                "Notificações de retorno recebidas pelos "
-                "3 investidores."
-            )
+            print("Notificações de retorno recebidas pelos 3 investidores.")
             return
 
         time.sleep(0.5)
 
     raise AssertionError(
-        "Notificações de retorno não recebidas pelos investidores: "
-        f"{sorted(pendentes)}"
+        f"Notificações de retorno não recebidas pelos investidores: {sorted(pendentes)}"
     )
 
 
@@ -284,9 +267,7 @@ def criar_aporte(
         },
     )
 
-    assert status_http == 201, (
-        f"Falha ao realizar aporte de {valor} centavos: {resposta}"
-    )
+    assert status_http == 201, f"Falha ao realizar aporte de {valor} centavos: {resposta}"
 
     assert isinstance(resposta, dict)
 
@@ -316,9 +297,7 @@ def criar_e_publicar_campanha(
         token=token_empreendedor,
     )
 
-    assert status_http == 201, (
-        f"Falha ao criar campanha: {resposta}"
-    )
+    assert status_http == 201, f"Falha ao criar campanha: {resposta}"
     assert isinstance(resposta, dict)
 
     campanha_id = str(resposta["id"])
@@ -329,9 +308,7 @@ def criar_e_publicar_campanha(
         token=token_empreendedor,
     )
 
-    assert status_http == 200, (
-        f"Falha ao submeter campanha: {resposta}"
-    )
+    assert status_http == 200, f"Falha ao submeter campanha: {resposta}"
 
     status_http, resposta = requisicao(
         "POST",
@@ -339,9 +316,7 @@ def criar_e_publicar_campanha(
         token=token_admin,
     )
 
-    assert status_http == 200, (
-        f"Falha ao aprovar campanha: {resposta}"
-    )
+    assert status_http == 200, f"Falha ao aprovar campanha: {resposta}"
 
     assert isinstance(resposta, dict)
 
@@ -376,8 +351,7 @@ def aguardar_investidor_verificado(
         time.sleep(0.2)
 
     raise AssertionError(
-        f"Investidor {investidor_id} não foi verificado "
-        f"em Aportes após {timeout} segundos."
+        f"Investidor {investidor_id} não foi verificado em Aportes após {timeout} segundos."
     )
 
 
@@ -410,7 +384,6 @@ def preparar_investidores() -> list[tuple[dict[str, Any], str]]:
     return investidores
 
 
-
 def realizar_aportes(
     campanha_id: str,
     investidores: list[tuple[dict[str, Any], str]],
@@ -439,15 +412,11 @@ def realizar_aportes(
 
         total += valor
 
-        print(
-            f"Aporte {indice} confirmado: "
-            f"{valor / 100:.2f} reais"
-        )
+        print(f"Aporte {indice} confirmado: {valor / 100:.2f} reais")
 
     assert total == 300000
 
     return total
-
 
 
 def aguardar_usuario_no_cache(
@@ -478,9 +447,9 @@ def aguardar_usuario_no_cache(
         time.sleep(0.1)
 
     raise AssertionError(
-        f"Usuário {usuario_id} não foi sincronizado "
-        "em Campanhas após 15 segundos."
+        f"Usuário {usuario_id} não foi sincronizado em Campanhas após 15 segundos."
     )
+
 
 def aguardar_campanha_na_custodia(
     campanha_id: str,
@@ -505,16 +474,13 @@ def aguardar_campanha_na_custodia(
             ).fetchone()
 
         if registro is not None:
-            print(
-                f"Campanha {campanha_id} sincronizada na Custódia."
-            )
+            print(f"Campanha {campanha_id} sincronizada na Custódia.")
             return
 
         time.sleep(0.2)
 
     raise AssertionError(
-        f"Campanha {campanha_id} não foi sincronizada "
-        f"na Custódia após {timeout} segundos."
+        f"Campanha {campanha_id} não foi sincronizada na Custódia após {timeout} segundos."
     )
 
 
@@ -564,24 +530,16 @@ def test_caminho_feliz_completo(sistema_e2e) -> None:
         quantidade_esperada=3,
     )
 
-    prazo_fim = (
-        campanha.get("prazoFim")
-        or campanha.get("prazo_fim")
-    )
+    prazo_fim = campanha.get("prazoFim") or campanha.get("prazo_fim")
 
-    assert isinstance(prazo_fim, str), (
-        f"Prazo final da campanha não encontrado: {campanha}"
-    )
+    assert isinstance(prazo_fim, str), f"Prazo final da campanha não encontrado: {campanha}"
 
     aguardar_liquidacao_sucesso(
         campanha_id,
         prazo_fim,
     )
 
-    print(
-        f"Campanha {campanha_id} criada por "
-        f"{empreendedor['nome']}"
-    )
+    print(f"Campanha {campanha_id} criada por {empreendedor['nome']}")
 
     print("Cadastro, publicação e aportes concluídos.")
 
@@ -619,10 +577,7 @@ def consultar_extrato_custodia(
 ) -> dict[str, Any]:
     """Consulta o extrato financeiro da Custódia."""
 
-    url = (
-        "http://127.0.0.1:3004"
-        f"/custodia/campanhas/{campanha_id}/extrato"
-    )
+    url = f"http://127.0.0.1:3004/custodia/campanhas/{campanha_id}/extrato"
 
     request = urllib.request.Request(url, method="GET")
 
@@ -657,10 +612,7 @@ def aguardar_total_arrecadado(
             ).fetchone()
 
         if registro is not None and int(registro[0]) >= valor_esperado:
-            print(
-                f"Total sincronizado em Campanhas: "
-                f"R$ {int(registro[0]) / 100:.2f}"
-            )
+            print(f"Total sincronizado em Campanhas: R$ {int(registro[0]) / 100:.2f}")
             return
 
         time.sleep(0.2)
@@ -681,10 +633,7 @@ def aguardar_retencoes_custodia(
 
     import time
 
-    url = (
-        "http://127.0.0.1:3004/"
-        f"custodia/campanhas/{campanha_id}/extrato"
-    )
+    url = f"http://127.0.0.1:3004/custodia/campanhas/{campanha_id}/extrato"
 
     limite = time.monotonic() + timeout
 
@@ -694,27 +643,17 @@ def aguardar_retencoes_custodia(
                 url,
                 timeout=5,
             ) as response:
-                extrato = json.loads(
-                    response.read().decode("utf-8")
-                )
+                extrato = json.loads(response.read().decode("utf-8"))
 
             retencoes = [
                 movimentacao
-                for movimentacao in extrato.get(
-                    "movimentacoes", []
-                )
+                for movimentacao in extrato.get("movimentacoes", [])
                 if movimentacao.get("tipo") == "RETENCAO"
             ]
 
-            total_retido = sum(
-                int(movimentacao["valor"])
-                for movimentacao in retencoes
-            )
+            total_retido = sum(int(movimentacao["valor"]) for movimentacao in retencoes)
 
-            if (
-                len(retencoes) == quantidade_esperada
-                and total_retido == valor_esperado
-            ):
+            if len(retencoes) == quantidade_esperada and total_retido == valor_esperado:
                 print(
                     f"Custódia sincronizada: "
                     f"{len(retencoes)} retenções, "
@@ -748,9 +687,7 @@ def aguardar_liquidacao_sucesso(
     import time
     from datetime import UTC, datetime
 
-    prazo = datetime.fromisoformat(
-        prazo_fim.replace("Z", "+00:00")
-    )
+    prazo = datetime.fromisoformat(prazo_fim.replace("Z", "+00:00"))
 
     segundos = max(
         1.0,
@@ -759,9 +696,7 @@ def aguardar_liquidacao_sucesso(
 
     url = "http://127.0.0.1:3004/_dev/clock/advance"
 
-    dados = json.dumps(
-        {"seconds": segundos}
-    ).encode("utf-8")
+    dados = json.dumps({"seconds": segundos}).encode("utf-8")
 
     request = urllib.request.Request(
         url,
@@ -775,19 +710,11 @@ def aguardar_liquidacao_sucesso(
             resultado = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as erro:
         detalhe = erro.read().decode("utf-8")
-        raise AssertionError(
-            f"Falha ao avançar relógio da Custódia: {detalhe}"
-        ) from erro
+        raise AssertionError(f"Falha ao avançar relógio da Custódia: {detalhe}") from erro
 
-    print(
-        f"Relógio avançado. Campanhas apuradas: "
-        f"{resultado.get('apuradas')}"
-    )
+    print(f"Relógio avançado. Campanhas apuradas: {resultado.get('apuradas')}")
 
-    url_extrato = (
-        "http://127.0.0.1:3004/"
-        f"custodia/campanhas/{campanha_id}/extrato"
-    )
+    url_extrato = f"http://127.0.0.1:3004/custodia/campanhas/{campanha_id}/extrato"
 
     limite = time.monotonic() + timeout
 
@@ -797,16 +724,12 @@ def aguardar_liquidacao_sucesso(
                 url_extrato,
                 timeout=5,
             ) as response:
-                extrato = json.loads(
-                    response.read().decode("utf-8")
-                )
+                extrato = json.loads(response.read().decode("utf-8"))
 
             liquidacao = extrato.get("liquidacao")
 
             if liquidacao is not None:
-                assert liquidacao["resultado"] == "SUCESSO", (
-                    f"Resultado inesperado: {liquidacao}"
-                )
+                assert liquidacao["resultado"] == "SUCESSO", f"Resultado inesperado: {liquidacao}"
 
                 assert liquidacao["valor_bruto"] == 300000
                 assert liquidacao["taxa_plataforma"] == 15000
@@ -824,9 +747,37 @@ def aguardar_liquidacao_sucesso(
 
         time.sleep(0.5)
 
+    raise AssertionError(f"Campanha {campanha_id} não foi liquidada após {timeout} segundos.")
+
+
+def aguardar_participacoes(
+    campanha_id: str,
+    investidores: list[tuple[dict[str, Any], str]],
+    timeout: float = 30.0,
+) -> None:
+    """Aguarda a projeção assíncrona das participações após a liquidação."""
+
+    limite = time.time() + timeout
+    pendentes = {str(usuario["id"]): token for usuario, token in investidores}
+
+    while time.time() < limite:
+        for investidor_id, token in list(pendentes.items()):
+            participacoes = consultar_participacoes(token)
+            if any(
+                campanha_id in (item.get("campanhaId"), item.get("campanha_id"))
+                for item in participacoes
+                if isinstance(item, dict)
+            ):
+                del pendentes[investidor_id]
+
+        if not pendentes:
+            print("Participações registradas para os 3 investidores.")
+            return
+
+        time.sleep(0.5)
+
     raise AssertionError(
-        f"Campanha {campanha_id} não foi liquidada "
-        f"após {timeout} segundos."
+        f"Participações não registradas após {timeout} segundos: {sorted(pendentes)}"
     )
 
 
@@ -840,6 +791,8 @@ def distribuir_retornos_e_validar(
 
     valor_distribuicao = total - (total * 5 // 100)
 
+    aguardar_participacoes(campanha_id, investidores)
+
     status_http, resposta = requisicao(
         "POST",
         f"/api/retornos/campanhas/{campanha_id}/distribuir",
@@ -849,9 +802,7 @@ def distribuir_retornos_e_validar(
         token=token_empreendedor,
     )
 
-    assert status_http == 200, (
-        f"Falha na distribuição de retornos: {resposta}"
-    )
+    assert status_http == 200, f"Falha na distribuição de retornos: {resposta}"
 
     assert isinstance(resposta, dict)
 
@@ -860,22 +811,15 @@ def distribuir_retornos_e_validar(
     assert isinstance(distribuicoes, list)
     assert len(distribuicoes) == 3
 
-    valores = {
-        str(item["investidorId"]): int(item["valor"])
-        for item in distribuicoes
-    }
+    valores = {str(item["investidorId"]): int(item["valor"]) for item in distribuicoes}
 
     assert sum(valores.values()) == valor_distribuicao
 
-    assert set(valores) == {
-        str(usuario["id"])
-        for usuario, _token in investidores
-    }
+    assert set(valores) == {str(usuario["id"]) for usuario, _token in investidores}
 
-    assert all(
-        item.get("retornoId")
-        for item in distribuicoes
-    ), "Distribuição sem identificador de retorno."
+    assert all(item.get("retornoId") for item in distribuicoes), (
+        "Distribuição sem identificador de retorno."
+    )
 
     print("Distribuição proporcional validada.")
 

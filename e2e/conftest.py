@@ -22,7 +22,7 @@ def aguardar_gateway(timeout: float = 30.0) -> None:
 
     while time.monotonic() < limite:
         try:
-            with urllib.request.urlopen(url, timeout=1) as resposta:
+            with urllib.request.urlopen(url, timeout=15) as resposta:
                 if resposta.status == 200:
                     return
         except (OSError, urllib.error.URLError):
@@ -62,7 +62,10 @@ def sistema_e2e():
         yield processo
     finally:
         if processo.poll() is None:
-            processo.send_signal(signal.SIGINT)
+            if sys.platform == "win32":
+                processo.terminate()
+            else:
+                processo.send_signal(signal.SIGINT)
 
             try:
                 processo.wait(timeout=20)
