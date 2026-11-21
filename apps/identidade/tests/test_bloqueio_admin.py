@@ -12,7 +12,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.eventos import Perfil
+from contracts.catalogo import ler_envelope
+from contracts.eventos import Perfil, UsuarioStatusAlterado
 from contracts.topicos import USUARIO_STATUS_ALTERADO
 from identidade.app import criar_identidade_app
 from identidade.contas import repositorio
@@ -436,7 +437,20 @@ def test_evento_usuario_status_alterado_sai_pelo_broker(
     assert envelope["tipo"] == USUARIO_STATUS_ALTERADO
     assert envelope["eventId"] == requisicao["eventId"]
 
-    payload = envelope["payload"]
+    # Adapta o envelope da Outbox ao formato oficial do catálogo.
+    dados_envelope = dict(envelope)
+    dados_envelope["topic"] = dados_envelope.pop("tipo")
+    dados_envelope["schemaVersion"] = dados_envelope.pop("versão")
+    dados_envelope["occurredAt"] = dados_envelope.pop("ocorridoEm")
+
+    contrato = ler_envelope(dados_envelope)
+
+    assert isinstance(contrato.payload, UsuarioStatusAlterado)
+
+    payload = contrato.payload.model_dump(
+        by_alias=True,
+        mode="json",
+    )
 
     assert payload["usuarioId"] == investidor["id"]
     assert payload["statusAnterior"] == "ATIVO"

@@ -16,6 +16,9 @@ from aportes.processamento import (
     confirmar_aporte,
 )
 from aportes.repository import inicializar_banco
+from contracts.catalogo import ler_envelope
+from contracts.eventos import AporteConfirmado, TotalArrecadadoAtualizado
+from contracts.topicos import APORTE_CONFIRMADO, TOTAL_ARRECADADO_ATUALIZADO
 from shared.db import transaction
 from shared.outbox import OutboxEvent
 from shared.outbox import add as adicionar_evento_original
@@ -365,3 +368,63 @@ def test_rollback_remove_pendencia_custodia(
 
     assert quantidade == 0
     assert consultar_banco(tmp_path) == (0, 0, 0, 0)
+
+
+def test_eventos_de_aporte_validam_catalogo_oficial(
+    tmp_path: Path,
+) -> None:
+    """Valida os dois eventos produzidos pelo processamento de aportes."""
+    inicializar_banco(tmp_path)
+
+    resultado = criar_aporte(tmp_path)
+
+    def buscar_eventos(
+        conn: sqlite3.Connection,
+    ) -> list[tuple[str, str]]:
+        registros = conn.execute(
+            """
+            SELECT tipo_evento, payload
+            FROM outbox_evento
+            WHERE tipo_evento IN (?, ?)
+            ORDER BY rowid
+            """,
+            (APORTE_CONFIRMADO, TOTAL_ARRECADADO_ATUALIZADO),
+        ).fetchall()
+
+        return [(str(tipo), str(payload)) for tipo, payload in registros]
+
+    registros = transaction(buscar_eventos, "aportes", tmp_path)
+
+    eventos = {}
+
+    for tipo, payload_json in registros:
+        dados = json.loads(payload_json)
+
+        # Converte o envelope interno da Outbox para o formato do catálogo.
+        dados["topic"] = dados.pop("tipo")
+        dados["schemaVersion"] = dados.pop("versão")
+        dados["occurredAt"] = dados.pop("ocorridoEm")
+
+        eventos[tipo] = ler_envelope(dados)
+
+    assert set(eventos) == {
+        APORTE_CONFIRMADO,
+        TOTAL_ARRECADADO_ATUALIZADO,
+    }
+
+    evento_aporte = eventos[APORTE_CONFIRMADO]
+    assert isinstance(evento_aporte.payload, AporteConfirmado)
+
+    aporte = evento_aporte.payload
+    assert aporte.aporte_id == resultado.resposta["aporteId"]
+    assert aporte.campanha_id == "campanha-1"
+    assert aporte.investidor_id == "investidor-1"
+    assert aporte.valor == 5000
+    assert aporte.confirmado_em.tzinfo is not None
+
+    evento_total = eventos[TOTAL_ARRECADADO_ATUALIZADO]
+    assert isinstance(evento_total.payload, TotalArrecadadoAtualizado)
+
+    total = evento_total.payload
+    assert total.campanha_id == "campanha-1"
+    assert total.valor_acumulado == 5000

@@ -1,17 +1,26 @@
 """Testes do serviço de criação de participações."""
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from contracts.eventos import CampanhaLiquidada, CampanhaPublicada
+from contracts.catalogo import ler_envelope
+from contracts.eventos import (
+    CampanhaLiquidada,
+    CampanhaPublicada,
+    RetornoDistribuido,
+)
+from contracts.topicos import RETORNO_DISTRIBUIDO
 from custodia_retornos.custodia.consumidores import (
     consumir_campanha_publicada,
 )
 from custodia_retornos.retornos.servico import criar_participacoes
+from custodia_retornos.retornos.servico_distribuicao import distribuir_retornos
 from shared.db import migrate, transaction
+from shared.messaging_schema import install_messaging_schema
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -19,6 +28,7 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 @pytest.fixture
 def banco(tmp_path: Path) -> Path:
     migrate("custodia_retornos", MIGRATIONS, tmp_path)
+    install_messaging_schema("custodia_retornos", tmp_path)
 
     def preparar(conn: sqlite3.Connection) -> None:
         campanha = CampanhaPublicada(
@@ -173,3 +183,146 @@ def test_rejeita_total_diferente_do_valor_bruto(
     )
 
     assert quantidade == 0
+
+
+def test_distribuir_retornos_publica_eventos_validos_na_outbox(
+    banco: Path,
+) -> None:
+    """Valida os eventos reais produzidos pela distribuição financeira."""
+
+    # Cria as participações reais dos dois investidores.
+    transaction(
+        lambda conn: criar_participacoes(conn, evento_liquidado()),
+        "custodia_retornos",
+        banco,
+    )
+
+    # Registra a liquidação bem-sucedida exigida pelo serviço.
+    def registrar_liquidacao(conn: sqlite3.Connection) -> None:
+        # A liquidação depende de um resultado previamente apurado.
+        conn.execute(
+            """
+            INSERT INTO custodia_resultados (
+                campanha_id,
+                resultado,
+                valor_arrecadado,
+                encerrada_em
+            )
+            VALUES (?, 'SUCESSO', ?, ?)
+            """,
+            (
+                "campanha-teste",
+                10000,
+                "2026-11-20T12:00:00+00:00",
+            ),
+        )
+
+        conn.execute(
+            """
+            INSERT INTO custodia_liquidacoes (
+                campanha_id,
+                resultado,
+                valor_bruto,
+                taxa_plataforma,
+                valor_liquido,
+                liquidada_em
+            )
+            VALUES (?, 'SUCESSO', ?, ?, ?, ?)
+            """,
+            (
+                "campanha-teste",
+                10000,
+                1000,
+                9000,
+                "2026-11-20T12:00:00+00:00",
+            ),
+        )
+
+    transaction(
+        registrar_liquidacao,
+        "custodia_retornos",
+        banco,
+    )
+
+    # Executa o produtor real e distribui o valor líquido.
+    distribuicoes = transaction(
+        lambda conn: distribuir_retornos(
+            conn,
+            campanha_id="campanha-teste",
+            empreendedor_id="empreendedor-1",
+            valor_total=9000,
+        ),
+        "custodia_retornos",
+        banco,
+    )
+
+    assert {str(item["investidorId"]): int(item["valor"]) for item in distribuicoes} == {
+        "investidor-1": 7200,
+        "investidor-2": 1800,
+    }
+
+    # Consulta os eventos efetivamente gravados na Outbox.
+    def consultar_outbox(
+        conn: sqlite3.Connection,
+    ) -> list[tuple[str, str]]:
+        linhas = conn.execute(
+            """
+            SELECT tipo_evento, payload
+            FROM outbox_evento
+            WHERE tipo_evento = ?
+            ORDER BY created_at, outbox_id
+            """,
+            (RETORNO_DISTRIBUIDO,),
+        ).fetchall()
+
+        return [(str(tipo), str(payload)) for tipo, payload in linhas]
+
+    eventos = transaction(
+        consultar_outbox,
+        "custodia_retornos",
+        banco,
+    )
+
+    assert len(eventos) == 2
+
+    distribuicoes_por_investidor = {str(item["investidorId"]): item for item in distribuicoes}
+
+    valores_validados: dict[str, int] = {}
+
+    for topico, payload_json in eventos:
+        legado = json.loads(payload_json)
+
+        # Converte o envelope legado da Outbox para o envelope oficial.
+        envelope = ler_envelope(
+            {
+                "eventId": legado["eventId"],
+                "topic": legado["tipo"],
+                "schemaVersion": legado["versão"],
+                "occurredAt": legado["ocorridoEm"],
+                "correlationId": legado["correlationId"],
+                "payload": legado["payload"],
+            }
+        )
+
+        assert topico == RETORNO_DISTRIBUIDO
+        assert envelope.topic == RETORNO_DISTRIBUIDO
+        assert isinstance(envelope.payload, RetornoDistribuido)
+
+        payload = envelope.payload
+        investidor_id = payload.investidor_id
+
+        assert payload.campanha_id == "campanha-teste"
+        assert payload.evento_origem_id
+        assert investidor_id in distribuicoes_por_investidor
+
+        esperado = distribuicoes_por_investidor[investidor_id]
+
+        assert payload.retorno_id == str(esperado["retornoId"])
+        assert payload.valor == int(esperado["valor"])
+
+        valores_validados[investidor_id] = payload.valor
+
+    assert valores_validados == {
+        "investidor-1": 7200,
+        "investidor-2": 1800,
+    }

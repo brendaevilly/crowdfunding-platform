@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
@@ -9,7 +10,9 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.eventos import Perfil
+from contracts.catalogo import ler_envelope
+from contracts.eventos import IdentidadeVerificada, Perfil
+from contracts.topicos import IDENTIDADE_VERIFICADA
 from identidade.app import criar_identidade_app
 from identidade.contas.servico import cadastrar_usuario
 from identidade.kyc.servico import processar_usuario_cadastrado
@@ -64,11 +67,51 @@ def criar_usuario(
     return usuario.id, token
 
 
+def validar_evento_outbox(
+    data_dir: Path,
+    agregado_id: str,
+    topic: str,
+) -> None:
+    """Valida um evento real da Outbox contra o catálogo oficial."""
+
+    def consultar(conn):
+        return conn.execute(
+            """
+            SELECT payload
+            FROM outbox_evento
+            WHERE agregado_id = ?
+              AND tipo_evento = ?
+            LIMIT 1
+            """,
+            (agregado_id, topic),
+        ).fetchone()
+
+    linha = transaction(consultar, "identidade", data_dir)
+    assert linha is not None, f"Evento {topic} não encontrado na Outbox"
+
+    legado = json.loads(linha[0])
+
+    envelope = ler_envelope(
+        {
+            "eventId": legado["eventId"],
+            "topic": legado["tipo"],
+            "schemaVersion": legado.get("versão", 1),
+            "occurredAt": legado["ocorridoEm"],
+            "correlationId": legado["correlationId"],
+            "payload": legado["payload"],
+        }
+    )
+
+    assert envelope.topic == topic
+    assert isinstance(envelope.payload, IdentidadeVerificada)
+    assert envelope.payload.usuario_id == agregado_id
+
+
 def test_modo_auto_aprova_documento(
     ambiente: tuple[TestClient, Path],
 ) -> None:
     cliente, data_dir = ambiente
-    _, token = criar_usuario(data_dir)
+    usuario_id, token = criar_usuario(data_dir)
 
     resposta = cliente.post(
         "/kyc/documentos",
@@ -80,6 +123,11 @@ def test_modo_auto_aprova_documento(
     assert resposta.json()["status"] == "APROVADA"
     assert resposta.json()["documentoTipo"] == "CPF"
     assert "12345678909" not in resposta.text
+    validar_evento_outbox(
+        data_dir,
+        usuario_id,
+        IDENTIDADE_VERIFICADA,
+    )
 
 
 def test_modo_auto_reprova_documento(

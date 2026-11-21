@@ -350,3 +350,48 @@ def test_consumidores_via_endpoint_events(tmp_path: Path) -> None:
         campanha = _obter_campanha(tmp_path, cid)
         assert campanha is not None
         assert campanha.status == StatusCampanha.ENCERRADA
+
+
+def test_consumidores_rejeitam_payloads_invalidos_via_endpoint_events(
+    tmp_path: Path,
+) -> None:
+    """Os dois consumidores rejeitam payloads incompatíveis com os contratos."""
+    inicializar_banco(tmp_path)
+
+    app = FastAPI()
+    app.include_router(
+        create_events_router(
+            service="campanhas",
+            handlers={
+                TOTAL_ARRECADADO_ATUALIZADO: consumir_total_arrecadado_atualizado,
+                RESULTADO_CAMPANHA: consumir_resultado_campanha,
+            },
+            data_dir=tmp_path,
+        )
+    )
+
+    topicos = (
+        TOTAL_ARRECADADO_ATUALIZADO,
+        RESULTADO_CAMPANHA,
+    )
+
+    with TestClient(app) as client:
+        for topic in topicos:
+            event_id = str(uuid4())
+
+            evento = {
+                "eventId": event_id,
+                "topic": topic,
+                "payload": {
+                    "eventId": event_id,
+                    "tipo": topic,
+                    "versão": 1,
+                    "ocorridoEm": datetime.now(UTC).isoformat(),
+                    "payload": {},
+                },
+            }
+
+            resposta = client.post("/events", json=evento)
+
+            assert resposta.status_code == 422
+            assert "Contrato de evento inválido" in resposta.json()["detail"]

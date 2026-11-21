@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from broker.app import app as broker_app
 from broker.dispatcher import dispatch_pending
+from contracts.topicos import CAMPANHA_PUBLICADA
 from shared.consumer import create_events_router
 from shared.db import transaction
 from shared.messaging_schema import install_messaging_schema
@@ -41,8 +42,13 @@ def salvar_evento(data_dir: Path) -> str:
             conn,
             OutboxEvent(
                 agregado_id="campanha-1",
-                tipo_evento="CampanhaPublicada",
-                payload={"campanhaId": "campanha-1"},
+                tipo_evento=CAMPANHA_PUBLICADA,
+                payload={
+                    "campanhaId": "campanha-1",
+                    "empreendedorId": "usuario-1",
+                    "meta": 10000,
+                    "prazoFim": "2026-12-31T23:59:59+00:00",
+                },
                 correlation_id="correlation-1",
             ),
         )
@@ -111,7 +117,7 @@ def test_broker_nao_duplica_evento(ambiente: tuple[TestClient, Path]) -> None:
 
     evento = {
         "eventId": "evento-duplicado",
-        "topic": "CampanhaPublicada",
+        "topic": CAMPANHA_PUBLICADA,
         "payload": {"campanhaId": "campanha-1"},
         "correlationId": "correlation-1",
     }
@@ -163,7 +169,7 @@ def test_fluxo_completo_com_broker_real(
     consumer_app.include_router(
         create_events_router(
             service="aportes",
-            handlers={"CampanhaPublicada": handler},
+            handlers={CAMPANHA_PUBLICADA: handler},
             data_dir=data_dir,
         )
     )
@@ -173,7 +179,7 @@ def test_fluxo_completo_com_broker_real(
             "/subscriptions",
             json={
                 "service": "aportes",
-                "topic": "CampanhaPublicada",
+                "topic": CAMPANHA_PUBLICADA,
                 "url": "http://consumer",
             },
         )
