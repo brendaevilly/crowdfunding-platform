@@ -17,16 +17,16 @@ Plataforma de crowdfunding com custódia (*escrow*) dos aportes, construída com
 ## Diagrama da Arquitetura Local
 
 ```mermaid
-flowchart TD
-    subgraph Cliente["Frontend e Clientes HTTP"]
-        Browser["Navegador / SPA (Porta :3000)"]
+graph TD
+    subgraph Clientes["Frontend e Clientes HTTP"]
+        Browser["Navegador Web / SPA (:3000)"]
     end
 
     subgraph Borda["Borda da Plataforma"]
-        Gateway["Gateway Local (:3000)\nFastAPI Proxy • JWT • Rate Limit • Static UI"]
+        Gateway["Gateway Local (:3000)<br/>Proxy Reverso • JWT • Rate Limit"]
     end
 
-    subgraph Servicos["Microsserviços de Negócio (Processos Independentes)"]
+    subgraph Servicos["Microsserviços de Negócio"]
         Identidade["Identidade & KYC (:3001)"]
         Campanhas["Campanhas (:3002)"]
         Aportes["Aportes (:3003)"]
@@ -34,54 +34,52 @@ flowchart TD
         Notificacao["Notificação (:3005)"]
     end
 
-    subgraph Dados["Isolamento Database-per-Service (SQLite)"]
-        DB_Identidade[("data/identidade.db")]
-        DB_Campanhas[("data/campanhas.db")]
-        DB_Aportes[("data/aportes.db")]
-        DB_Custodia[("data/custodia_retornos.db")]
-        DB_Notificacao[("data/notificacao.db")]
-        DB_Broker[("data/broker.db")]
+    subgraph Bancos["Bancos Isolados (SQLite)"]
+        DB_Identidade[("identidade.db")]
+        DB_Campanhas[("campanhas.db")]
+        DB_Aportes[("aportes.db")]
+        DB_Custodia[("custodia_retornos.db")]
+        DB_Notificacao[("notificacao.db")]
+        DB_Broker[("broker.db")]
     end
 
     subgraph Mensageria["Broker Local de Mensagens (:3010)"]
         BrokerPub["POST /publish"]
-        BrokerDispatcher["Dispatcher com Backoff & Retries"]
-        DLQ["Dead Letter Queue (DLQ)\nGET /dlq • Replay"]
+        BrokerDisp["Dispatcher & Retries"]
+        DLQ["Dead Letter Queue (DLQ)"]
     end
 
-    Browser -->|HTTP / JSON| Gateway
-    Gateway -->|/api/identidade| Identidade
-    Gateway -->|/api/campanhas| Campanhas
-    Gateway -->|/api/aportes| Aportes
-    Gateway -->|/api/retornos| Custodia
-    Gateway -->|/api/notificacoes| Notificacao
+    Browser --> Gateway
 
-    Identidade --- DB_Identidade
-    Campanhas --- DB_Campanhas
-    Aportes --- DB_Aportes
-    Custodia --- DB_Custodia
-    Notificacao --- DB_Notificacao
-    BrokerPub --- DB_Broker
+    Gateway -->|"proxy /api/identidade"| Identidade
+    Gateway -->|"proxy /api/campanhas"| Campanhas
+    Gateway -->|"proxy /api/aportes"| Aportes
+    Gateway -->|"proxy /api/retornos"| Custodia
+    Gateway -->|"proxy /api/notificacoes"| Notificacao
 
-    %% Comunicação Síncrona Específica
-    Aportes -.->|HTTP Síncrono (Circuit Breaker)\nGET /campanhas/:id/status| Campanhas
+    Identidade --> DB_Identidade
+    Campanhas --> DB_Campanhas
+    Aportes --> DB_Aportes
+    Custodia --> DB_Custodia
+    Notificacao --> DB_Notificacao
+    BrokerPub --> DB_Broker
 
-    %% Publicação via Outbox
-    Identidade ==>|Outbox Relay| BrokerPub
-    Campanhas ==>|Outbox Relay| BrokerPub
-    Aportes ==>|Outbox Relay| BrokerPub
-    Custodia ==>|Outbox Relay| BrokerPub
+    Aportes -.->|"HTTP Síncrono (Circuit Breaker)"| Campanhas
 
-    %% Entregas do Broker
-    BrokerDispatcher -->|POST /events\nusuario.cadastrado| Campanhas
-    BrokerDispatcher -->|POST /events\nidentidade.verificada| Aportes
-    BrokerDispatcher -->|POST /events\ncampanha.publicada| Custodia
-    BrokerDispatcher -->|POST /events\naporte.confirmado| Custodia
-    BrokerDispatcher -->|POST /events\naporte.confirmado| Campanhas
-    BrokerDispatcher -->|POST /events\ncampanha.resultado| Campanhas
-    BrokerDispatcher -->|POST /events\ncampanha.resultado| Custodia
-    BrokerDispatcher -->|POST /events\nnotificacoes| Notificacao
-    BrokerDispatcher -->|Falhas Excedidas| DLQ
+    Identidade -->|"Outbox Relay"| BrokerPub
+    Campanhas -->|"Outbox Relay"| BrokerPub
+    Aportes -->|"Outbox Relay"| BrokerPub
+    Custodia -->|"Outbox Relay"| BrokerPub
+
+    BrokerDisp -->|"usuario.cadastrado"| Campanhas
+    BrokerDisp -->|"identidade.verificada"| Aportes
+    BrokerDisp -->|"campanha.publicada"| Custodia
+    BrokerDisp -->|"aporte.confirmado"| Custodia
+    BrokerDisp -->|"aporte.confirmado"| Campanhas
+    BrokerDisp -->|"campanha.resultado"| Campanhas
+    BrokerDisp -->|"campanha.resultado"| Custodia
+    BrokerDisp -->|"notificacoes"| Notificacao
+    BrokerDisp -->|"falhas esgotadas"| DLQ
 ```
 
 ---
