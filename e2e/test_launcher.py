@@ -80,7 +80,7 @@ def test_make_dev_sobe_tudo_em_menos_de_15s_e_ctrl_c_libera_as_portas() -> None:
 
 
 def test_kill_e_start_de_um_servico() -> None:
-    proc, _, _ = _subir("only", "aportes", "campanhas")
+    proc, _, _ = _subir("only", "broker", "aportes", "campanhas")
     try:
         comando = [sys.executable, str(RAIZ / "scripts" / "dev.py")]
         out = subprocess.run([*comando, "kill", "aportes"], capture_output=True, text=True)
