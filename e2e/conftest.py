@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,7 @@ def aguardar_gateway(timeout: float = 30.0) -> None:
 
 
 @pytest.fixture(scope="function")
-def sistema_e2e():
+def sistema_e2e() -> Iterator[subprocess.Popen[bytes]]:
     """Sobe os microsserviços uma vez para toda a sessão E2E."""
 
     ambiente = {

@@ -484,7 +484,7 @@ def aguardar_campanha_na_custodia(
     )
 
 
-def test_caminho_feliz_completo(sistema_e2e) -> None:
+def test_caminho_feliz_completo(sistema_e2e: object) -> None:
     """Executa o fluxo principal da plataforma pelo Gateway."""
 
     email_admin = preparar_administrador()
