@@ -171,6 +171,20 @@ Isso deixa somente *squash merge* (título do PR como mensagem), apaga a branch 
 
 Regras: funcionalidade nova sem teste não é aprovada. Todo consumidor de evento precisa de teste de **reentrega** (mesmo evento 2×, efeito 1×).
 
+### E2E de falha e resiliência (`e2e/test_falhas_resiliencia.py`)
+
+Sobem o sistema real (`scripts/dev.py up`), derrubam/sobem serviços com `dev.py kill|start` e validam o
+saldo final da Custódia. Rodar: `uv run pytest e2e/test_falhas_resiliencia.py -m e2e -ra`
+(o fixture usa retentativas rápidas do broker: `BROKER_MAX_ATTEMPTS=8`, backoff de 1–2 s).
+
+| Cenário | O que o teste faz | Resultado verificado |
+|---|---|---|
+| Meta não atingida | 2 aportes (R$ 1.300 de R\$ 3.000) e relógio avançado além do prazo | Liquidação `FALHA`, devolução integral (2 `DEVOLUCAO` = R$ 1.300), taxa 0, nenhuma `LIBERACAO`/`TAXA`, `saldo_retido = 0`; Campanhas `ENCERRADA` com `metaAtingida = false` |
+| `custodia_retornos` fora durante aportes | derruba a Custódia, faz 3 aportes (aceitos), sobe a Custódia | Eventos acumulam no broker e são processados na volta: exatamente 3 `RETENCAO` (R$ 3.000), sem duplicidade; liquidação posterior correta (taxa 5%) |
+| `campanhas` fora | derruba Campanhas e tenta aportar 3× | Aportes rejeitados com `503` (`REJEITADO`, circuit breaker), nenhuma retenção e `saldo_retido = 0` na Custódia |
+| Reinício do broker | derruba o broker no meio dos aportes e o sobe de novo | Nada se perde (eventos ficam na outbox e são republicados): 3 `RETENCAO` sem duplicidade; liquidação correta |
+| Evento envenenado | publica `aporte.confirmado` inválido direto no broker | Esgota as tentativas (HTTP 422), aparece em `GET /dlq`; `POST /dlq/{id}/replay` reenfileira a entrega, que é reprocessada; a Custódia segue saudável |
+
 ## Regras de arquitetura (o CI e a revisão cobram)
 
 - Nenhum import entre `apps/*`. O que for comum vai para `packages/shared` ou `packages/contracts`.

@@ -39,6 +39,11 @@ def sistema_e2e() -> Iterator[subprocess.Popen[bytes]]:
     ambiente = {
         "CUSTODIA_DEV_MODE": "true",
         "CUSTODIA_TAXA_PERCENTUAL": "5",
+        # Retentativas rápidas do broker para os cenários de resiliência.
+        "BROKER_MAX_ATTEMPTS": "8",
+        "BROKER_RETRY_BASE_SECONDS": "1",
+        "BROKER_RETRY_MAX_SECONDS": "2",
+        "BROKER_DISPATCH_INTERVAL": "1",
     }
 
     import os
@@ -64,7 +69,12 @@ def sistema_e2e() -> Iterator[subprocess.Popen[bytes]]:
     finally:
         if processo.poll() is None:
             if sys.platform == "win32":
-                processo.terminate()
+                # Encerra o launcher e todos os microsserviços filhos.
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(processo.pid)],
+                    capture_output=True,
+                    check=False,
+                )
             else:
                 processo.send_signal(signal.SIGINT)
 
