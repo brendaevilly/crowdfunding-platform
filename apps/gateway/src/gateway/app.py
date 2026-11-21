@@ -376,6 +376,13 @@ def criar_app(
             and destino.caminho == "/retornos/minhas-participacoes"
         )
 
+        rota_retornos_distribuir = (
+            request.method == "POST"
+            and destino.servico == "custodia_retornos"
+            and destino.caminho.startswith("/retornos/campanhas/")
+            and destino.caminho.endswith("/distribuir")
+        )
+
         rota_identidade_protegida = destino.servico == "identidade" and (
             (request.method == "GET" and destino.caminho == "/identidade/usuarios/me")
             or destino.caminho.startswith("/identidade/kyc/")
@@ -389,7 +396,10 @@ def criar_app(
         # Encaminha Authorization somente quando necessário.
         # As claims já foram validadas pelo Gateway.
         if claims is not None and (
-            rota_aportes_meus or rota_retornos_meus or rota_identidade_protegida
+            rota_aportes_meus
+            or rota_retornos_meus
+            or rota_retornos_distribuir
+            or rota_identidade_protegida
         ):
             token = _bearer(request)
 

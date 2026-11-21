@@ -90,6 +90,8 @@ def configure_messaging(
                 data_dir,
             )
 
+            # O registro das assinaturas acontece em segundo plano.
+            # A indisponibilidade do broker não bloqueia a inicialização.
             subscription_task = asyncio.create_task(
                 registrar_assinaturas(),
                 name=f"{service}-subscriptions",
@@ -101,12 +103,12 @@ def configure_messaging(
             try:
                 yield
             finally:
+                stop_event.set()
                 subscription_task.cancel()
                 await asyncio.gather(
                     subscription_task,
                     return_exceptions=True,
                 )
-                stop_event.set()
                 await asyncio.to_thread(
                     relay_thread.join,
                     timeout=6.0,
